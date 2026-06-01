@@ -1,0 +1,21 @@
+{
+  "devDependencies": {
+    "@biomejs/biome": "2.2.0",
+    "@jadis/core": "0.12.1",
+    "typescript": "~6.0.2",
+    "vite": "^8.0.12"
+  },
+  "engineStrict": true,
+  "engines": {
+    "npm": ">=10.0.0"
+  },
+  "name": "perspective-generator",
+  "private": true,
+  "scripts": {
+    "build": "tsc && vite build",
+    "dev": "vite",
+    "preview": "vite preview"
+  },
+  "type": "module",
+  "version": "0.0.0"
+}
