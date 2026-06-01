@@ -260,6 +260,7 @@ export class RenderService {
     const circle = this.buildSvgElement(
       'circle',
       {
+        class: 'point',
         cx: `${x}`,
         cy: `${y}`,
         fill: color,

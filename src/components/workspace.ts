@@ -53,7 +53,7 @@ export class Workspace extends Jadis {
           box-shadow: none;
           border: none;
         }
-        circle {
+        .point {
           r: 0.5;
         }
         line, circle {
