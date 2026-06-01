@@ -41,10 +41,46 @@ export class Workspace extends Jadis {
         background: white;
         box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         border: 1px solid #ccc;
+        touch-action: none;
       }
       .draggable {
         cursor: move;
+        touch-action: none;
       }
+
+      @media (hover: none) and (pointer: coarse) {
+        .workspace {
+          padding: 5px;
+          overflow: auto;
+        }
+        .point {
+          r: 5;
+        }
+        text {
+          font-size: 6px;
+        }
+      }
+
+      @media (hover: none) and (pointer: coarse) and (orientation: portrait) {
+        .paper {
+          /* Portrait phones: width drives scale, height follows to keep ratio. */
+          width: calc(100vw - 16px);
+          height: auto;
+          max-height: calc(100dvh - 16px);
+          flex: 0 0 auto;
+        }
+      }
+
+      @media (hover: none) and (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+        .paper {
+          /* Landscape phones: height drives scale, width follows to keep ratio. */
+          height: calc(100dvh - 16px);
+          width: auto;
+          max-width: calc(100vw - 16px);
+          flex: 0 0 auto;
+        }
+      }
+
       @media print {
         .workspace {
           padding: 0;

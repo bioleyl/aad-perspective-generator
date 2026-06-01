@@ -17,6 +17,7 @@ export class RenderService {
   private _layer: SVGGElement;
   private _state: State;
   private _draggingElement: DraggableElements | null = null;
+  private _activePointerId: number | null = null;
   private _lineWidth = '0.5';
   private _pointRadius = '3';
   private _visionLineColor = 'green';
@@ -27,9 +28,10 @@ export class RenderService {
     this._layer = layer;
     this._state = stateService.getState();
 
-    this._svg.addEventListener('pointerdown', this.onMouseDown.bind(this));
-    this._svg.addEventListener('pointermove', this.onMouseMove.bind(this));
-    this._svg.addEventListener('pointerup', this.onMouseUp.bind(this));
+    this._svg.addEventListener('pointerdown', this.onPointerDown.bind(this));
+    this._svg.addEventListener('pointermove', this.onPointerMove.bind(this));
+    this._svg.addEventListener('pointerup', this.onPointerUp.bind(this));
+    this._svg.addEventListener('pointercancel', this.onPointerUp.bind(this));
   }
 
   render() {
@@ -46,19 +48,35 @@ export class RenderService {
     this.drawMeasurePoints();
   }
 
-  private onMouseDown(event: MouseEvent) {
+  private onPointerDown(event: PointerEvent) {
     const target = event.target as SVGElement;
     this._draggingElement = target.getAttribute('data-draggable') as DraggableElements | null;
-  }
 
-  private onMouseUp() {
-    this._draggingElement = null;
-  }
-
-  private onMouseMove(event: MouseEvent) {
     if (!this._draggingElement) {
       return;
     }
+
+    this._activePointerId = event.pointerId;
+    this._svg.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  }
+
+  private onPointerUp(event: PointerEvent) {
+    if (this._activePointerId !== null && this._svg.hasPointerCapture(this._activePointerId)) {
+      this._svg.releasePointerCapture(this._activePointerId);
+    }
+
+    this._draggingElement = null;
+    this._activePointerId = null;
+    event.preventDefault();
+  }
+
+  private onPointerMove(event: PointerEvent) {
+    if (!this._draggingElement || this._activePointerId !== event.pointerId) {
+      return;
+    }
+
+    event.preventDefault();
 
     const point = this._svg.createSVGPoint();
     point.x = event.clientX;
