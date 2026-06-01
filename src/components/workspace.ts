@@ -7,7 +7,6 @@ export class Workspace extends Jadis {
   private _paper: SVGSVGElement | null = null;
   private _layer: SVGGElement | null = null;
   private _renderService: RenderService | null = null;
-  private _animationFrameId: number | null = null;
 
   onConnect() {
     this._paper = this.shadowRoot?.querySelector('.paper') || null;
@@ -67,16 +66,9 @@ export class Workspace extends Jadis {
   private startRendering() {
     const render = () => {
       this._renderService?.render();
-      this._animationFrameId = requestAnimationFrame(render);
+      requestAnimationFrame(render);
     };
     render();
-  }
-
-  private stopRendering() {
-    if (this._animationFrameId !== null) {
-      cancelAnimationFrame(this._animationFrameId);
-      this._animationFrameId = null;
-    }
   }
 }
 

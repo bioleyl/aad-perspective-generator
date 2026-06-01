@@ -25,7 +25,7 @@ export class ToolbarRange extends Jadis {
   declare selectedValue?: number;
 
   onConnect() {
-    const { label, min, max, step = 1, unit = '' } = this.options;
+    const { label, min, max, step = 1 } = this.options;
 
     this.refs.label.textContent = label;
     this.refs.input.min = String(min);
