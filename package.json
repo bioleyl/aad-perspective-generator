@@ -1,7 +1,7 @@
 {
   "devDependencies": {
     "@biomejs/biome": "2.2.0",
-    "@jadis/core": "0.12.1",
+    "@jadis/core": "0.12.2",
     "typescript": "~6.0.2",
     "vite": "^8.0.12"
   },
