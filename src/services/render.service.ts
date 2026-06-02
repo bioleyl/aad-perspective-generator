@@ -231,10 +231,20 @@ export class RenderService {
     }
 
     const measurePoint45 = this.getMeasurePointX(vanishingPointLeftX, Math.PI / 4);
-    const measurePointLeft = observerPosition.x - vanishingPointLeftX + observerPosition.x;
-    const measurePointRight = observerPosition.x - (vanishingPointRightX - observerPosition.x);
+    const distanceLeftToObserver = Math.hypot(
+      observerPosition.x - vanishingPointLeftX,
+      observerPosition.y - horizonLineY
+    );
+    const distanceRightToObserver = Math.hypot(
+      observerPosition.x - vanishingPointRightX,
+      observerPosition.y - horizonLineY
+    );
+
+    const measurePointLeft = vanishingPointLeftX + distanceLeftToObserver;
+    const measurePointRight = vanishingPointRightX - distanceRightToObserver;
 
     this.buildSvgPoint(measurePoint45, horizonLineY, 'orange', 'PM 45°');
+
     this.buildSvgPoint(measurePointLeft, horizonLineY, 'orange', 'PMG');
     this.buildSvgPoint(measurePointRight, horizonLineY, 'orange', 'PMD');
   }
