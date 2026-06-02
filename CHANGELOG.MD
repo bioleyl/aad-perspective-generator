@@ -9,3 +9,4 @@
 - Ajout du point de mesure à 45°
 - Ajout de l’affichage de la feuille inscrite dans le cône de vision
 - Ajout de la grille de perspective
+- Ajout de la fonction d'impression

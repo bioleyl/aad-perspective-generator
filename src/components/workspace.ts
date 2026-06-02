@@ -75,23 +75,11 @@ export class Workspace extends Jadis {
           flex: 0 0 auto;
         }
       }
-
-      @media print {
-        .workspace {
-          padding: 0;
-        }
-        .paper {
-          box-shadow: none;
-          border: none;
-        }
-        .point {
-          r: 0.5;
-        }
-        line, circle {
-          stroke-width: 0.25;
-        }
-      }
     `;
+  }
+
+  print() {
+    this._renderService?.print();
   }
 
   private startRendering() {

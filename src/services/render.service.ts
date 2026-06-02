@@ -32,6 +32,92 @@ export class RenderService {
     this.drawMeasurePoints();
   }
 
+  print() {
+    const paper = this.getPaperRectGeometry();
+    const { width: mmWidth, height: mmHeight } = PAPER_FORMATS[this._state.paperFormat];
+
+    const printSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    printSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    printSvg.setAttribute('width', `${mmWidth}mm`);
+    printSvg.setAttribute('height', `${mmHeight}mm`);
+    printSvg.setAttribute('viewBox', `${paper.x} ${paper.y} ${paper.width} ${paper.height}`);
+
+    const svg = this._layer.ownerSVGElement;
+    if (svg) {
+      const defs = svg.querySelector('defs');
+      if (defs) {
+        printSvg.appendChild(defs.cloneNode(true));
+      }
+    }
+
+    printSvg.appendChild(this._layer.cloneNode(true));
+
+    const orientation = mmWidth > mmHeight ? 'landscape' : 'portrait';
+    const serialized = new XMLSerializer().serializeToString(printSvg);
+
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html, body {
+        width: ${mmWidth}mm;
+        height: ${mmHeight}mm;
+        overflow: hidden;
+      }
+      body {
+        background: white;
+      }
+      svg {
+        display: block;
+      }
+      .non-printable {
+        display: none;
+      }
+      .point {
+        r: 0.5;
+      }
+      text {
+        font-size: 1.5px;
+        transform: translate(-2px, 2px);
+      }
+      line, circle {
+        stroke-width: 0.25;
+      }
+      @page {
+        size: ${mmWidth}mm ${mmHeight}mm ${orientation};
+        margin: 0;
+      }
+      </style>
+    </head>
+    <body>${serialized}</body>
+    </html>`;
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+
+    const printWindow = window.open(url, '_blank');
+    if (!printWindow) {
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    printWindow.addEventListener('load', () => {
+      printWindow.focus();
+      printWindow.print();
+    });
+
+    printWindow.addEventListener('afterprint', () => {
+      printWindow.close();
+      URL.revokeObjectURL(url);
+    });
+  }
+
   private clearLayer() {
     this._layer.innerHTML = '';
   }
@@ -169,6 +255,7 @@ export class RenderService {
     const { x1, x2 } = this.getVisionHitPoint(visionAngle);
 
     const line1 = this.buildSvgElement('line', {
+      class: 'non-printable',
       stroke: this._visionLineColor,
       'stroke-width': this._lineWidth,
       x1: `${observerPosition.x}`,
@@ -178,6 +265,7 @@ export class RenderService {
     });
 
     const line2 = this.buildSvgElement('line', {
+      class: 'non-printable',
       stroke: this._visionLineColor,
       'stroke-width': this._lineWidth,
       x1: `${observerPosition.x}`,
@@ -194,6 +282,7 @@ export class RenderService {
     const { observerPosition, horizonLineY } = this._state;
     const radius = this.getVisionCircleRadius();
     const circle = this.buildSvgElement('circle', {
+      class: 'non-printable',
       cx: `${observerPosition.x}`,
       cy: `${horizonLineY}`,
       fill: 'none',

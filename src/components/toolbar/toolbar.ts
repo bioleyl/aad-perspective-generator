@@ -5,9 +5,14 @@ export class Toolbar extends Jadis {
 
   private _isCollapsed = false;
 
+  events = this.useEvents<{
+    print: undefined;
+  }>();
+
   readonly refs = this.useRefs((ref) => ({
     collapseToggle: ref<HTMLButtonElement>('.collapse-toggle'),
     content: ref<HTMLDivElement>('.toolbar-content'),
+    printButton: ref<HTMLButtonElement>('.print-btn'),
   }));
 
   onConnect() {
@@ -16,6 +21,10 @@ export class Toolbar extends Jadis {
     this.on(this.refs.collapseToggle, 'click', () => {
       this._isCollapsed = !this._isCollapsed;
       this.updateCollapsedState();
+    });
+
+    this.on(this.refs.printButton, 'click', () => {
+      this.events.emit('print');
     });
   }
 
@@ -36,7 +45,8 @@ export class Toolbar extends Jadis {
         gap: 8px;
       }
 
-      .collapse-toggle {
+      .collapse-toggle,
+      .print-btn {
         border: 1px solid #ccc;
         background: #fff;
         padding: 6px 10px;
@@ -44,6 +54,7 @@ export class Toolbar extends Jadis {
         line-height: 1.1;
         border-radius: 4px;
         cursor: pointer;
+        width: var(--default-toolbar-element-width);
       }
 
       .toolbar-content {
@@ -82,12 +93,6 @@ export class Toolbar extends Jadis {
           gap: 12px;
         }
       }
-
-      @media print {
-        :host {
-          display: none;
-        }
-      }
       `;
   }
 
@@ -95,7 +100,10 @@ export class Toolbar extends Jadis {
     return html`
       <div class="toolbar-header">
         <strong>Toolbar</strong>
-        <button type="button" class="collapse-toggle">Collapse</button>
+        <div class="toolbar-actions">
+          <button type="button" class="print-btn">🖨 Imprimer</button>
+          <button type="button" class="collapse-toggle">Collapse</button>
+        </div>
       </div>
       <div class="toolbar-content">
         <aad-toolbar-group>
