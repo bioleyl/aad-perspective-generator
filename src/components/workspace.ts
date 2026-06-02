@@ -12,10 +12,9 @@ export class Workspace extends Jadis {
     this._paper = this.shadowRoot?.querySelector('.paper') || null;
     this._layer = this._paper?.querySelector('#drawing-layer') || null;
 
-    assert(this._paper, 'Paper element not found');
     assert(this._layer, 'Drawing layer not found');
 
-    this._renderService = new RenderService(this._paper, this._layer);
+    this._renderService = new RenderService(this._layer);
 
     this.startRendering();
   }
@@ -23,7 +22,7 @@ export class Workspace extends Jadis {
   templateHtml() {
     return html`
       <div class="workspace">
-        <svg class="paper" width="100%" height="100%">
+        <svg class="paper" width="297mm" height="210mm" viewBox="0 0 297 210">
           <g id="drawing-layer"></g>
         </svg>
       </div>
@@ -41,10 +40,6 @@ export class Workspace extends Jadis {
         background: white;
         box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         border: 1px solid #ccc;
-        touch-action: none;
-      }
-      .draggable {
-        cursor: move;
         touch-action: none;
       }
 

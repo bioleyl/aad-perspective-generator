@@ -101,7 +101,12 @@ export class Toolbar extends Jadis {
         <aad-toolbar-group>
           <aad-paper-format-selector></aad-paper-format-selector>
         </aad-toolbar-group>
-        <aad-vision-angle-range></aad-vision-angle-range>
+        <aad-toolbar-group>
+          <aad-cube-rotation-range></aad-cube-rotation-range>
+        </aad-toolbar-group>
+        <aad-toolbar-group>
+          <aad-vision-angle-range></aad-vision-angle-range>
+        </aad-toolbar-group>
         <aad-toolbar-group>
           <aad-display-checkboxes></aad-display-checkboxes>
         </aad-toolbar-group>

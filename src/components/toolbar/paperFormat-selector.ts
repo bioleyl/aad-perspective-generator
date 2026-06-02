@@ -15,7 +15,7 @@ export class PaperFormatSelector extends Jadis {
 
     const select = createToolbarSelect<PaperFormatsValues>(
       {
-        label: 'Paper Format',
+        label: 'Format de papier',
         options: typedEntries(PAPER_FORMATS).map(([value, { label }]) => ({ label, value })),
       },
       paperFormat,

@@ -3,42 +3,25 @@ import { stateService } from './state.service';
 
 import type { State } from './state.service';
 
-const DraggableElements = {
-  observer: 'observer',
-  principlePoint: 'principle-point',
-  vanishingPointLeft: 'vanishing-point-left',
-  vanishingPointRight: 'vanishing-point-right',
-} as const;
-
-type DraggableElements = (typeof DraggableElements)[keyof typeof DraggableElements];
-
 export class RenderService {
-  private _svg: SVGSVGElement;
   private _layer: SVGGElement;
   private _state: State;
-  private _draggingElement: DraggableElements | null = null;
-  private _activePointerId: number | null = null;
   private _lineWidth = '0.5';
   private _pointRadius = '3';
   private _visionLineColor = 'green';
-  private _vanishingPointsDistanceSecurityMargin = 10;
 
-  constructor(svg: SVGSVGElement, layer: SVGGElement) {
-    this._svg = svg;
+  constructor(layer: SVGGElement) {
     this._layer = layer;
     this._state = stateService.getState();
-
-    this._svg.addEventListener('pointerdown', this.onPointerDown.bind(this));
-    this._svg.addEventListener('pointermove', this.onPointerMove.bind(this));
-    this._svg.addEventListener('pointerup', this.onPointerUp.bind(this));
-    this._svg.addEventListener('pointercancel', this.onPointerUp.bind(this));
   }
 
   render() {
+    this.computeObserverCoordinates();
+
     this._state = stateService.getState();
 
     this.clearLayer();
-    this.setPaperFormat();
+    this.drawPaper();
     this.drawHorizonLine();
     this.drawVisionAngle();
     this.drawVisionCircle();
@@ -48,84 +31,50 @@ export class RenderService {
     this.drawMeasurePoints();
   }
 
-  private onPointerDown(event: PointerEvent) {
-    const target = event.target as SVGElement;
-    this._draggingElement = target.getAttribute('data-draggable') as DraggableElements | null;
-
-    if (!this._draggingElement) {
-      return;
-    }
-
-    this._activePointerId = event.pointerId;
-    this._svg.setPointerCapture(event.pointerId);
-    event.preventDefault();
-  }
-
-  private onPointerUp(event: PointerEvent) {
-    if (this._activePointerId !== null && this._svg.hasPointerCapture(this._activePointerId)) {
-      this._svg.releasePointerCapture(this._activePointerId);
-    }
-
-    this._draggingElement = null;
-    this._activePointerId = null;
-    event.preventDefault();
-  }
-
-  private onPointerMove(event: PointerEvent) {
-    if (!this._draggingElement || this._activePointerId !== event.pointerId) {
-      return;
-    }
-
-    event.preventDefault();
-
-    const point = this._svg.createSVGPoint();
-    point.x = event.clientX;
-    point.y = event.clientY;
-    const svgPoint = point.matrixTransform(this._svg.getScreenCTM()?.inverse());
-
-    const y = svgPoint.y;
-    const x = svgPoint.x;
-    const { height, width } = PAPER_FORMATS[this._state.paperFormat];
-
-    const clampedX = Math.max(0, Math.min(x, width));
-    const clampedY = Math.max(0, Math.min(y, height));
-
-    if (this._draggingElement === DraggableElements.observer) {
-      stateService.setObserverPosition(clampedX, clampedY);
-    } else if (this._draggingElement === DraggableElements.principlePoint) {
-      const { observerPosition, vanishingPointLeftX, vanishingPointRightX } = this._state;
-      // For simplicity, we will just move the principle point horizontally with the observer
-      stateService.setObserverPosition(clampedX, observerPosition.y);
-      stateService.setHorizonLineY(clampedY);
-      if (clampedX < vanishingPointLeftX + this._vanishingPointsDistanceSecurityMargin) {
-        stateService.setVanishingPointLeftX(clampedX - this._vanishingPointsDistanceSecurityMargin);
-      }
-      if (clampedX > vanishingPointRightX - this._vanishingPointsDistanceSecurityMargin) {
-        stateService.setVanishingPointRightX(clampedX + this._vanishingPointsDistanceSecurityMargin);
-      }
-    } else if (this._draggingElement === DraggableElements.vanishingPointLeft) {
-      const { observerPosition } = this._state;
-      stateService.setVanishingPointLeftX(
-        Math.min(clampedX, observerPosition.x - this._vanishingPointsDistanceSecurityMargin)
-      );
-    } else if (this._draggingElement === DraggableElements.vanishingPointRight) {
-      const { observerPosition } = this._state;
-      stateService.setVanishingPointRightX(
-        Math.max(clampedX, observerPosition.x + this._vanishingPointsDistanceSecurityMargin)
-      );
-    }
-  }
-
   private clearLayer() {
     this._layer.innerHTML = '';
   }
 
-  private setPaperFormat() {
-    const { paperFormat } = this._state;
-    const { width, height } = PAPER_FORMATS[paperFormat];
-    this._svg.setAttribute('width', `${width}mm`);
-    this._svg.setAttribute('height', `${height}mm`);
-    this._svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  private drawPaper() {
+    const { observerPosition, horizonLineY } = this._state;
+    const { width, height } = PAPER_FORMATS[this._state.paperFormat];
+
+    const ratio = width / height;
+    const radius = this.getVisionCircleRadius();
+    const rectWidth = (2 * radius * ratio) / Math.sqrt(ratio * ratio + 1);
+    const rectHeight = (2 * radius) / Math.sqrt(ratio * ratio + 1);
+
+    const x = observerPosition.x - rectWidth / 2;
+    const y = horizonLineY - rectHeight / 2;
+
+    const rect = this.buildSvgElement('rect', {
+      fill: 'none',
+      height: `${rectHeight}`,
+      stroke: '#666',
+      'stroke-width': this._lineWidth,
+      width: `${rectWidth}`,
+      x: `${x}`,
+      y: `${y}`,
+    });
+
+    this._layer.appendChild(rect);
+  }
+
+  private computeObserverCoordinates() {
+    const { cubeAngle, vanishingPointLeftX, vanishingPointRightX, horizonLineY } = this._state;
+
+    const radianCubeAngle = (cubeAngle * Math.PI) / 180;
+    const vanishingPointsDistance = vanishingPointRightX - vanishingPointLeftX;
+    const sin = Math.sin(radianCubeAngle);
+    const cos = Math.cos(radianCubeAngle);
+
+    const leftDistanceToPrinciplePoint = vanishingPointsDistance * sin * sin;
+    const observerDistanceToHorizon = vanishingPointsDistance * sin * cos;
+
+    stateService.setObserverPosition(
+      vanishingPointLeftX + leftDistanceToPrinciplePoint,
+      horizonLineY + observerDistanceToHorizon
+    );
   }
 
   private drawHorizonLine() {
@@ -143,33 +92,32 @@ export class RenderService {
   }
 
   private drawObserver() {
-    const { observerPosition, displayObserver } = this._state;
-    if (displayObserver) {
-      this.buildSvgPoint(observerPosition.x, observerPosition.y, 'red', 'OBS', DraggableElements.observer);
-    }
+    const { observerPosition } = this._state;
+    this.buildSvgPoint(observerPosition.x, observerPosition.y, 'red', 'PAO');
   }
 
   private drawVanishingPoints() {
-    const { displayVanishingPoints, vanishingPointLeftX, vanishingPointRightX, horizonLineY } = this._state;
-    if (!displayVanishingPoints) {
-      return;
-    }
+    const { vanishingPointLeftX, vanishingPointRightX, horizonLineY } = this._state;
 
-    this.buildSvgPoint(vanishingPointLeftX, horizonLineY, 'purple', 'PFG', DraggableElements.vanishingPointLeft);
-    this.buildSvgPoint(vanishingPointRightX, horizonLineY, 'purple', 'PFD', DraggableElements.vanishingPointRight);
+    this.buildSvgPoint(vanishingPointLeftX, horizonLineY, 'purple', 'PFG');
+    this.buildSvgPoint(vanishingPointRightX, horizonLineY, 'purple', 'PFD');
   }
 
   private drawMeasurePoints() {
-    const { displayMeasurePoints, vanishingPointLeftX, vanishingPointRightX, horizonLineY } = this._state;
+    const { displayMeasurePoints, vanishingPointLeftX, vanishingPointRightX, horizonLineY, observerPosition } =
+      this._state;
+
     if (!displayMeasurePoints) {
       return;
     }
 
-    const leftMeasurePointX = this.getMeasurePointX(vanishingPointLeftX, Math.PI / 4);
-    const rightMeasurePointX = this.getMeasurePointX(vanishingPointRightX, -Math.PI / 4);
+    const measurePoint45 = this.getMeasurePointX(vanishingPointLeftX, Math.PI / 4);
+    const measurePointLeft = observerPosition.x - vanishingPointLeftX + observerPosition.x;
+    const measurePointRight = observerPosition.x - (vanishingPointRightX - observerPosition.x);
 
-    this.buildSvgPoint(leftMeasurePointX, horizonLineY, 'orange', 'PMG');
-    this.buildSvgPoint(rightMeasurePointX, horizonLineY, 'orange', 'PMD');
+    this.buildSvgPoint(measurePoint45, horizonLineY, 'orange', 'PM 45°');
+    this.buildSvgPoint(measurePointLeft, horizonLineY, 'orange', 'PMG');
+    this.buildSvgPoint(measurePointRight, horizonLineY, 'orange', 'PMD');
   }
 
   private getMeasurePointX(vanishingPointX: number, angle: number): number {
@@ -189,14 +137,11 @@ export class RenderService {
 
   private drawPrinciplePoint() {
     const { observerPosition, horizonLineY } = this._state;
-    this.buildSvgPoint(observerPosition.x, horizonLineY, 'blue', 'PP', DraggableElements.principlePoint);
+    this.buildSvgPoint(observerPosition.x, horizonLineY, 'blue', 'PP');
   }
 
   private drawVisionAngle() {
-    const { displayVisionAngle, visionAngle, observerPosition, horizonLineY } = this._state;
-    if (!displayVisionAngle) {
-      return;
-    }
+    const { visionAngle, observerPosition, horizonLineY } = this._state;
 
     const { x1, x2 } = this.getVisionHitPoint(visionAngle);
 
@@ -223,13 +168,8 @@ export class RenderService {
   }
 
   private drawVisionCircle() {
-    const { displayVisionCircle, visionAngle, observerPosition, horizonLineY } = this._state;
-    if (!displayVisionCircle) {
-      return;
-    }
-
-    const { x1, x2 } = this.getVisionHitPoint(visionAngle);
-    const radius = Math.max(x1, x2) - observerPosition.x;
+    const { observerPosition, horizonLineY } = this._state;
+    const radius = this.getVisionCircleRadius();
     const circle = this.buildSvgElement('circle', {
       cx: `${observerPosition.x}`,
       cy: `${horizonLineY}`,
@@ -242,6 +182,12 @@ export class RenderService {
     this._layer.appendChild(circle);
   }
 
+  private getVisionCircleRadius(): number {
+    const { visionAngle, observerPosition } = this._state;
+    const { x1, x2 } = this.getVisionHitPoint(visionAngle);
+    return Math.max(Math.abs(x1 - observerPosition.x), Math.abs(x2 - observerPosition.x));
+  }
+
   private getVisionHitPoint(angle: number): { x1: number; x2: number } {
     const { observerPosition, horizonLineY } = this._state;
     const verticalDistanceToHorizon = observerPosition.y - horizonLineY;
@@ -252,53 +198,31 @@ export class RenderService {
     };
   }
 
-  private buildSvgElement(
-    tag: string,
-    attributes: Record<string, string> = {},
-    draggableName?: DraggableElements
-  ): SVGElement {
+  private buildSvgElement(tag: string, attributes: Record<string, string> = {}): SVGElement {
     const element = document.createElementNS('http://www.w3.org/2000/svg', tag);
     for (const [key, value] of Object.entries(attributes)) {
       element.setAttribute(key, value);
     }
-    if (draggableName) {
-      element.setAttribute('data-draggable', draggableName);
-      element.classList.add('draggable');
-    }
     return element;
   }
 
-  private buildSvgPoint(
-    x: number,
-    y: number,
-    color: string,
-    label?: string,
-    draggableName?: DraggableElements
-  ): void {
-    const circle = this.buildSvgElement(
-      'circle',
-      {
-        class: 'point',
-        cx: `${x}`,
-        cy: `${y}`,
-        fill: color,
-        r: this._pointRadius,
-      },
-      draggableName
-    );
+  private buildSvgPoint(x: number, y: number, color: string, label?: string): void {
+    const circle = this.buildSvgElement('circle', {
+      class: 'point',
+      cx: `${x}`,
+      cy: `${y}`,
+      fill: color,
+      r: this._pointRadius,
+    });
     this._layer.appendChild(circle);
 
     if (label) {
-      const text = this.buildSvgElement(
-        'text',
-        {
-          fill: 'black',
-          'font-size': this._pointRadius,
-          x: `${x + 3}`,
-          y: `${y - 3}`,
-        },
-        draggableName
-      );
+      const text = this.buildSvgElement('text', {
+        fill: 'black',
+        'font-size': this._pointRadius,
+        x: `${x + 3}`,
+        y: `${y - 3}`,
+      });
       text.textContent = label || '';
       this._layer.appendChild(text);
     }

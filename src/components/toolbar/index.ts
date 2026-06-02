@@ -1,3 +1,4 @@
+export * from './cubeRotation-range';
 export * from './display-checkboxes';
 export * from './paperFormat-selector';
 export * from './toolbar';

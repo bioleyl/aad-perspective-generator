@@ -8,45 +8,15 @@ export class DisplayCheckboxes extends Jadis {
   static readonly selector = 'aad-display-checkboxes';
 
   onConnect() {
-    const {
-      displayVisionAngle,
-      displayVisionCircle,
-      displayObserver,
-      displayMeasurePoints,
-      displayVanishingPoints,
-    } = stateService.getState();
+    const { displayMeasurePoints } = stateService.getState();
 
     const group = createElement(ToolbarGroup, {}, this.shadowRoot ?? this);
 
     createElement(
       ToolbarCheckbox,
-      { props: { checked: displayVisionAngle, label: 'Vision Angle' } },
-      group
-    ).events.register('change', (checked) => stateService.setDisplayVisionAngle(checked));
-
-    createElement(
-      ToolbarCheckbox,
-      { props: { checked: displayVisionCircle, label: 'Vision Circle' } },
-      group
-    ).events.register('change', (checked) => stateService.setDisplayVisionCircle(checked));
-
-    createElement(
-      ToolbarCheckbox,
-      { props: { checked: displayObserver, label: 'Observer' } },
-      group
-    ).events.register('change', (checked) => stateService.setDisplayObserver(checked));
-
-    createElement(
-      ToolbarCheckbox,
-      { props: { checked: displayMeasurePoints, label: 'Measure Points' } },
+      { props: { checked: displayMeasurePoints, label: 'Afficher les points de mesure' } },
       group
     ).events.register('change', (checked) => stateService.setDisplayMeasurePoints(checked));
-
-    createElement(
-      ToolbarCheckbox,
-      { props: { checked: displayVanishingPoints, label: 'Vanishing Points' } },
-      group
-    ).events.register('change', (checked) => stateService.setDisplayVanishingPoints(checked));
   }
 }
 
