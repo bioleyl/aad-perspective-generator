@@ -8,3 +8,4 @@
 - Correction du calcul des points de mesure
 - Ajout du point de mesure à 45°
 - Ajout de l’affichage de la feuille inscrite dans le cône de vision
+- Ajout de la grille de perspective

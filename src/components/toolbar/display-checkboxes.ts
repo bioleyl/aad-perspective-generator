@@ -8,7 +8,7 @@ export class DisplayCheckboxes extends Jadis {
   static readonly selector = 'aad-display-checkboxes';
 
   onConnect() {
-    const { displayMeasurePoints } = stateService.getState();
+    const { displayMeasurePoints, displayCompletePerspectiveLines } = stateService.getState();
 
     const group = createElement(ToolbarGroup, {}, this.shadowRoot ?? this);
 
@@ -17,6 +17,14 @@ export class DisplayCheckboxes extends Jadis {
       { props: { checked: displayMeasurePoints, label: 'Afficher les points de mesure' } },
       group
     ).events.register('change', (checked) => stateService.setDisplayMeasurePoints(checked));
+
+    createElement(
+      ToolbarCheckbox,
+      {
+        props: { checked: displayCompletePerspectiveLines, label: 'Afficher les lignes de perspective complètes' },
+      },
+      group
+    ).events.register('change', (checked) => stateService.setDisplayCompletePerspectiveLines(checked));
   }
 }
 

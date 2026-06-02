@@ -4,6 +4,7 @@ export interface State {
   paperFormat: PaperFormatsValues;
   visionAngle: number;
   displayMeasurePoints: boolean;
+  displayCompletePerspectiveLines: boolean;
   horizonLineY: number;
   observerPosition: { x: number; y: number };
   vanishingPointLeftX: number;
@@ -14,6 +15,7 @@ export interface State {
 class StateService {
   private _state: State = {
     cubeAngle: 35,
+    displayCompletePerspectiveLines: true,
     displayMeasurePoints: true,
     horizonLineY: 70,
     observerPosition: { x: 100, y: 100 },
@@ -37,6 +39,10 @@ class StateService {
 
   setDisplayMeasurePoints(display: boolean) {
     this._state.displayMeasurePoints = display;
+  }
+
+  setDisplayCompletePerspectiveLines(display: boolean) {
+    this._state.displayCompletePerspectiveLines = display;
   }
 
   setObserverPosition(x: number, y: number) {

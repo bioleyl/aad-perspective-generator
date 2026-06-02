@@ -22,6 +22,7 @@ export class RenderService {
 
     this.clearLayer();
     this.drawPaper();
+    this.drawPerspectiveLines();
     this.drawHorizonLine();
     this.drawVisionAngle();
     this.drawVisionCircle();
@@ -36,28 +37,51 @@ export class RenderService {
   }
 
   private drawPaper() {
-    const { observerPosition, horizonLineY } = this._state;
-    const { width, height } = PAPER_FORMATS[this._state.paperFormat];
-
-    const ratio = width / height;
-    const radius = this.getVisionCircleRadius();
-    const rectWidth = (2 * radius * ratio) / Math.sqrt(ratio * ratio + 1);
-    const rectHeight = (2 * radius) / Math.sqrt(ratio * ratio + 1);
-
-    const x = observerPosition.x - rectWidth / 2;
-    const y = horizonLineY - rectHeight / 2;
+    const { x, y, width, height } = this.getPaperRectGeometry();
 
     const rect = this.buildSvgElement('rect', {
       fill: 'none',
-      height: `${rectHeight}`,
+      height: `${height}`,
       stroke: '#666',
       'stroke-width': this._lineWidth,
-      width: `${rectWidth}`,
+      width: `${width}`,
       x: `${x}`,
       y: `${y}`,
     });
 
     this._layer.appendChild(rect);
+  }
+
+  private drawPerspectiveLines() {
+    const { vanishingPointLeftX, vanishingPointRightX, displayCompletePerspectiveLines } = this._state;
+    const paper = this.getPaperRectGeometry();
+    const quarterHalfHeight = paper.height / 8;
+    const upperY = paper.y + paper.height / 2 - quarterHalfHeight;
+    const lowerY = paper.y + paper.height / 2 + quarterHalfHeight;
+    const perspectiveLines = this.buildSvgElement('g');
+
+    if (!displayCompletePerspectiveLines) {
+      perspectiveLines.setAttribute('clip-path', `url(#${this.updatePaperClipPath(paper)})`);
+    }
+
+    this.drawPerspectiveLine(perspectiveLines, paper.x, upperY, vanishingPointRightX, this._state.horizonLineY);
+    this.drawPerspectiveLine(perspectiveLines, paper.x, lowerY, vanishingPointRightX, this._state.horizonLineY);
+    this.drawPerspectiveLine(
+      perspectiveLines,
+      paper.x + paper.width,
+      upperY,
+      vanishingPointLeftX,
+      this._state.horizonLineY
+    );
+    this.drawPerspectiveLine(
+      perspectiveLines,
+      paper.x + paper.width,
+      lowerY,
+      vanishingPointLeftX,
+      this._state.horizonLineY
+    );
+
+    this._layer.appendChild(perspectiveLines);
   }
 
   private computeObserverCoordinates() {
@@ -78,13 +102,12 @@ export class RenderService {
   }
 
   private drawHorizonLine() {
-    const { horizonLineY, paperFormat } = this._state;
-    const { width } = PAPER_FORMATS[paperFormat];
+    const { horizonLineY } = this._state;
     const line = this.buildSvgElement('line', {
       stroke: 'black',
       'stroke-width': this._lineWidth,
       x1: '0',
-      x2: `${width}`,
+      x2: '300',
       y1: `${horizonLineY}`,
       y2: `${horizonLineY}`,
     });
@@ -182,10 +205,82 @@ export class RenderService {
     this._layer.appendChild(circle);
   }
 
+  private drawPerspectiveLine(
+    parent: SVGGElement | SVGElement,
+    startX: number,
+    startY: number,
+    targetX: number,
+    targetY: number
+  ) {
+    const line = this.buildSvgElement('line', {
+      stroke: 'rgba(80, 80, 80, 0.7)',
+      'stroke-width': this._lineWidth,
+      x1: `${startX}`,
+      x2: `${targetX}`,
+      y1: `${startY}`,
+      y2: `${targetY}`,
+    });
+
+    parent.appendChild(line);
+  }
+
   private getVisionCircleRadius(): number {
     const { visionAngle, observerPosition } = this._state;
     const { x1, x2 } = this.getVisionHitPoint(visionAngle);
     return Math.max(Math.abs(x1 - observerPosition.x), Math.abs(x2 - observerPosition.x));
+  }
+
+  private getPaperRectGeometry(): { height: number; width: number; x: number; y: number } {
+    const { observerPosition, horizonLineY } = this._state;
+    const { width, height } = PAPER_FORMATS[this._state.paperFormat];
+
+    const ratio = width / height;
+    const radius = this.getVisionCircleRadius();
+    const rectWidth = (2 * radius * ratio) / Math.sqrt(ratio * ratio + 1);
+    const rectHeight = (2 * radius) / Math.sqrt(ratio * ratio + 1);
+
+    return {
+      height: rectHeight,
+      width: rectWidth,
+      x: observerPosition.x - rectWidth / 2,
+      y: horizonLineY - rectHeight / 2,
+    };
+  }
+
+  private updatePaperClipPath(paper: { height: number; width: number; x: number; y: number }): string {
+    const clipPathId = 'paper-clip-path';
+    const svg = this._layer.ownerSVGElement;
+
+    if (!svg) {
+      return clipPathId;
+    }
+
+    let defs = svg.querySelector('defs') as SVGElement | null;
+    if (!defs) {
+      defs = this.buildSvgElement('defs');
+      svg.insertBefore(defs, svg.firstChild);
+    }
+
+    let clipPath = svg.querySelector(`#${clipPathId}`) as SVGElement | null;
+    if (!clipPath) {
+      clipPath = this.buildSvgElement('clipPath', { id: clipPathId });
+      defs.appendChild(clipPath);
+    }
+
+    while (clipPath.firstChild) {
+      clipPath.removeChild(clipPath.firstChild);
+    }
+
+    clipPath.appendChild(
+      this.buildSvgElement('rect', {
+        height: `${paper.height}`,
+        width: `${paper.width}`,
+        x: `${paper.x}`,
+        y: `${paper.y}`,
+      })
+    );
+
+    return clipPathId;
   }
 
   private getVisionHitPoint(angle: number): { x1: number; x2: number } {
