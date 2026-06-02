@@ -8,7 +8,12 @@ export class RenderService {
   private _state: State;
   private _lineWidth = '0.5';
   private _pointRadius = '3';
+  private _printOpacity = 0.5;
+  private _printPointRadiusMm = 0.4;
+  private _printLineWidthMm = 0.2;
   private _visionLineColor = 'green';
+  private _perspectiveLineColor = '#666';
+  private _printColor = 'black';
 
   constructor(layer: SVGGElement) {
     this._layer = layer;
@@ -35,12 +40,14 @@ export class RenderService {
   print() {
     const paper = this.getPaperRectGeometry();
     const { width: mmWidth, height: mmHeight } = PAPER_FORMATS[this._state.paperFormat];
+    const pointRadius = (this._printPointRadiusMm * paper.width) / mmWidth;
 
     const printSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     printSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     printSvg.setAttribute('width', `${mmWidth}mm`);
     printSvg.setAttribute('height', `${mmHeight}mm`);
     printSvg.setAttribute('viewBox', `${paper.x} ${paper.y} ${paper.width} ${paper.height}`);
+    printSvg.setAttribute('opacity', `${this._printOpacity}`);
 
     const svg = this._layer.ownerSVGElement;
     if (svg) {
@@ -81,14 +88,17 @@ export class RenderService {
         display: none;
       }
       .point {
-        r: 0.5;
+        r: ${pointRadius};
+        fill: ${this._printColor};
+        stroke: none;
       }
       text {
-        font-size: 1.5px;
-        transform: translate(-2px, 2px);
+        display: none;
       }
-      line, circle {
-        stroke-width: 0.25;
+      line, circle, rect {
+        stroke: ${this._printColor};
+        stroke-width: ${this._printLineWidthMm}mm;
+        vector-effect: non-scaling-stroke;
       }
       @page {
         size: ${mmWidth}mm ${mmHeight}mm ${orientation};
@@ -192,8 +202,8 @@ export class RenderService {
     const line = this.buildSvgElement('line', {
       stroke: 'black',
       'stroke-width': this._lineWidth,
-      x1: '0',
-      x2: '300',
+      x1: '-100',
+      x2: '400',
       y1: `${horizonLineY}`,
       y2: `${horizonLineY}`,
     });
@@ -302,7 +312,7 @@ export class RenderService {
     targetY: number
   ) {
     const line = this.buildSvgElement('line', {
-      stroke: 'rgba(80, 80, 80, 0.7)',
+      stroke: this._perspectiveLineColor,
       'stroke-width': this._lineWidth,
       x1: `${startX}`,
       x2: `${targetX}`,

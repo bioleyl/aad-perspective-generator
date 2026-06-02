@@ -21,7 +21,7 @@ class StateService {
     observerPosition: { x: 100, y: 100 },
     paperFormat: 'landscape',
     vanishingPointLeftX: 10,
-    vanishingPointRightX: 280,
+    vanishingPointRightX: 287,
     visionAngle: 60,
   };
 
