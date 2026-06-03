@@ -42,14 +42,13 @@ export class Workspace extends Jadis {
         border: 1px solid #ccc;
         touch-action: none;
       }
-
+      .point {
+        r: 2;
+      }
       @media (hover: none) and (pointer: coarse) {
         .workspace {
           padding: 5px;
           overflow: auto;
-        }
-        .point {
-          r: 5;
         }
         text {
           font-size: 6px;

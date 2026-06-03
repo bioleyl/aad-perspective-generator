@@ -8,7 +8,7 @@ export class RenderService {
   private _state: State;
   private _lineWidth = '0.5';
   private _pointRadius = '3';
-  private _printOpacity = 0.5;
+  private _printOpacity = 1;
   private _printPointRadiusMm = 0.4;
   private _printLineWidthMm = 0.2;
   private _visionLineColor = 'green';
@@ -35,6 +35,7 @@ export class RenderService {
     this.drawPrinciplePoint();
     this.drawVanishingPoints();
     this.drawMeasurePoints();
+    this.drawXProjectionMarkers();
   }
 
   print() {
@@ -95,6 +96,12 @@ export class RenderService {
       text {
         display: none;
       }
+      text.guide-label {
+        display: block;
+        font-size: ${pointRadius * 4}px;
+        fill: ${this._printColor};
+        transform: translate(-${pointRadius * 15}px, ${pointRadius * 20}px);
+      }
       line, circle, rect {
         stroke: ${this._printColor};
         stroke-width: ${this._printLineWidthMm}mm;
@@ -149,35 +156,76 @@ export class RenderService {
   }
 
   private drawPerspectiveLines() {
-    const { vanishingPointLeftX, vanishingPointRightX, displayCompletePerspectiveLines } = this._state;
+    const { vanishingPointLeftX, vanishingPointRightX, guidePointsInset } = this._state;
     const paper = this.getPaperRectGeometry();
-    const quarterHalfHeight = paper.height / 8;
-    const upperY = paper.y + paper.height / 2 - quarterHalfHeight;
-    const lowerY = paper.y + paper.height / 2 + quarterHalfHeight;
-    const perspectiveLines = this.buildSvgElement('g');
+    const clampedInset = Math.max(0, Math.min(guidePointsInset, paper.width / 2));
+    const leftX = paper.x + clampedInset;
+    const rightX = paper.x + paper.width - clampedInset;
+    const upperY = paper.y + paper.height / 4;
+    const lowerY = paper.y + (paper.height * 3) / 4;
 
-    if (!displayCompletePerspectiveLines) {
-      perspectiveLines.setAttribute('clip-path', `url(#${this.updatePaperClipPath(paper)})`);
-    }
+    const rightFamilyUpperLeftY = this.getYOnLineAtX(
+      paper.x,
+      upperY,
+      vanishingPointRightX,
+      this._state.horizonLineY,
+      leftX
+    );
+    const rightFamilyUpperRightY = this.getYOnLineAtX(
+      paper.x,
+      upperY,
+      vanishingPointRightX,
+      this._state.horizonLineY,
+      rightX
+    );
+    const rightFamilyLowerLeftY = this.getYOnLineAtX(
+      paper.x,
+      lowerY,
+      vanishingPointRightX,
+      this._state.horizonLineY,
+      leftX
+    );
+    const rightFamilyLowerRightY = this.getYOnLineAtX(
+      paper.x,
+      lowerY,
+      vanishingPointRightX,
+      this._state.horizonLineY,
+      rightX
+    );
 
-    this.drawPerspectiveLine(perspectiveLines, paper.x, upperY, vanishingPointRightX, this._state.horizonLineY);
-    this.drawPerspectiveLine(perspectiveLines, paper.x, lowerY, vanishingPointRightX, this._state.horizonLineY);
-    this.drawPerspectiveLine(
-      perspectiveLines,
+    const leftFamilyUpperLeftY = this.getYOnLineAtX(
       paper.x + paper.width,
       upperY,
       vanishingPointLeftX,
-      this._state.horizonLineY
+      this._state.horizonLineY,
+      leftX
     );
-    this.drawPerspectiveLine(
-      perspectiveLines,
+    const leftFamilyUpperRightY = this.getYOnLineAtX(
+      paper.x + paper.width,
+      upperY,
+      vanishingPointLeftX,
+      this._state.horizonLineY,
+      rightX
+    );
+    const leftFamilyLowerLeftY = this.getYOnLineAtX(
       paper.x + paper.width,
       lowerY,
       vanishingPointLeftX,
-      this._state.horizonLineY
+      this._state.horizonLineY,
+      leftX
+    );
+    const leftFamilyLowerRightY = this.getYOnLineAtX(
+      paper.x + paper.width,
+      lowerY,
+      vanishingPointLeftX,
+      this._state.horizonLineY,
+      rightX
     );
 
-    this._layer.appendChild(perspectiveLines);
+    this.drawGuideSegmentPoints(leftX, rightFamilyUpperLeftY, rightX, rightFamilyUpperRightY, 'A');
+    this.drawGuideSegmentPoints(leftX, rightFamilyLowerLeftY, rightX, rightFamilyLowerRightY, 'B');
+    this.drawGuideSegmentPoints(leftX, leftFamilyUpperLeftY, rightX, leftFamilyUpperRightY, 'C');
+    this.drawGuideSegmentPoints(leftX, leftFamilyLowerLeftY, rightX, leftFamilyLowerRightY, 'D');
   }
 
   private computeObserverCoordinates() {
@@ -198,16 +246,12 @@ export class RenderService {
   }
 
   private drawHorizonLine() {
-    const { horizonLineY } = this._state;
-    const line = this.buildSvgElement('line', {
-      stroke: 'black',
-      'stroke-width': this._lineWidth,
-      x1: '-100',
-      x2: '400',
-      y1: `${horizonLineY}`,
-      y2: `${horizonLineY}`,
-    });
-    this._layer.appendChild(line);
+    const paper = this.getPaperRectGeometry();
+    const clampedInset = Math.max(0, Math.min(this._state.guidePointsInset, paper.width / 2));
+    const leftX = paper.x + clampedInset;
+    const rightX = paper.x + paper.width - clampedInset;
+
+    this.drawGuideSegmentPoints(leftX, this._state.horizonLineY, rightX, this._state.horizonLineY, 'H');
   }
 
   private drawObserver() {
@@ -223,8 +267,13 @@ export class RenderService {
   }
 
   private drawMeasurePoints() {
-    const { displayMeasurePoints, vanishingPointLeftX, vanishingPointRightX, horizonLineY, observerPosition } =
-      this._state;
+    const {
+      displayPoints: displayMeasurePoints,
+      vanishingPointLeftX,
+      vanishingPointRightX,
+      horizonLineY,
+      observerPosition,
+    } = this._state;
 
     if (!displayMeasurePoints) {
       return;
@@ -265,7 +314,10 @@ export class RenderService {
   }
 
   private drawPrinciplePoint() {
-    const { observerPosition, horizonLineY } = this._state;
+    const { observerPosition, horizonLineY, displayPoints: displayMeasurePoints } = this._state;
+    if (!displayMeasurePoints) {
+      return;
+    }
     this.buildSvgPoint(observerPosition.x, horizonLineY, 'blue', 'PP');
   }
 
@@ -314,23 +366,77 @@ export class RenderService {
     this._layer.appendChild(circle);
   }
 
-  private drawPerspectiveLine(
-    parent: SVGGElement | SVGElement,
-    startX: number,
-    startY: number,
-    targetX: number,
-    targetY: number
-  ) {
-    const line = this.buildSvgElement('line', {
-      stroke: this._perspectiveLineColor,
-      'stroke-width': this._lineWidth,
-      x1: `${startX}`,
-      x2: `${targetX}`,
-      y1: `${startY}`,
-      y2: `${targetY}`,
-    });
+  private drawGuideSegmentPoints(startX: number, startY: number, endX: number, endY: number, guideId?: string) {
+    if (this._state.displayCompletePerspectiveLines) {
+      const line = this.buildSvgElement('line', {
+        stroke: this._perspectiveLineColor,
+        'stroke-width': this._lineWidth,
+        x1: `${startX}`,
+        x2: `${endX}`,
+        y1: `${startY}`,
+        y2: `${endY}`,
+      });
+      this._layer.appendChild(line);
+    }
 
-    parent.appendChild(line);
+    this.buildSvgPoint(
+      startX,
+      startY,
+      this._perspectiveLineColor,
+      guideId ? guideId : undefined,
+      guideId ? 'guide-label' : undefined
+    );
+    this.buildSvgPoint(endX, endY, this._perspectiveLineColor, guideId, guideId ? 'guide-label' : undefined);
+  }
+
+  private drawXProjectionMarkers() {
+    const paper = this.getPaperRectGeometry();
+    const clampedXInset = Math.max(0, Math.min(this._state.guidePointsInset, paper.width / 2));
+    const clampedYInset = Math.max(0, Math.min(this._state.guidePointsInset, paper.height / 2));
+    const leftX = paper.x + clampedXInset;
+    const rightX = paper.x + paper.width - clampedXInset;
+    const topY = paper.y + clampedYInset;
+    const bottomY = paper.y + paper.height - clampedYInset;
+    const { horizonLineY, observerPosition, vanishingPointLeftX, vanishingPointRightX } = this._state;
+
+    const markers: Array<{ x: number; id: string }> = [
+      { id: 'PP', x: observerPosition.x },
+      { id: 'PFG', x: vanishingPointLeftX },
+      { id: 'PFD', x: vanishingPointRightX },
+    ];
+
+    const measurePoint45 = this.getMeasurePointX(vanishingPointLeftX, Math.PI / 4);
+    const distanceLeftToObserver = Math.hypot(
+      observerPosition.x - vanishingPointLeftX,
+      observerPosition.y - horizonLineY
+    );
+    const distanceRightToObserver = Math.hypot(
+      observerPosition.x - vanishingPointRightX,
+      observerPosition.y - horizonLineY
+    );
+
+    markers.push({ id: 'PM45', x: measurePoint45 });
+    markers.push({ id: 'PMG', x: vanishingPointLeftX + distanceLeftToObserver });
+    markers.push({ id: 'PMD', x: vanishingPointRightX - distanceRightToObserver });
+
+    for (const marker of markers) {
+      if (marker.x < leftX || marker.x > rightX) {
+        continue;
+      }
+
+      this.buildSvgPoint(marker.x, topY, this._perspectiveLineColor, `${marker.id}`, 'guide-label');
+      this.buildSvgPoint(marker.x, bottomY, this._perspectiveLineColor, `${marker.id}`, 'guide-label');
+    }
+  }
+
+  private getYOnLineAtX(x1: number, y1: number, x2: number, y2: number, x: number): number {
+    const dx = x2 - x1;
+    if (Math.abs(dx) < 0.0001) {
+      return y1;
+    }
+
+    const t = (x - x1) / dx;
+    return y1 + t * (y2 - y1);
   }
 
   private getVisionCircleRadius(): number {
@@ -356,42 +462,6 @@ export class RenderService {
     };
   }
 
-  private updatePaperClipPath(paper: { height: number; width: number; x: number; y: number }): string {
-    const clipPathId = 'paper-clip-path';
-    const svg = this._layer.ownerSVGElement;
-
-    if (!svg) {
-      return clipPathId;
-    }
-
-    let defs = svg.querySelector('defs') as SVGElement | null;
-    if (!defs) {
-      defs = this.buildSvgElement('defs');
-      svg.insertBefore(defs, svg.firstChild);
-    }
-
-    let clipPath = svg.querySelector(`#${clipPathId}`) as SVGElement | null;
-    if (!clipPath) {
-      clipPath = this.buildSvgElement('clipPath', { id: clipPathId });
-      defs.appendChild(clipPath);
-    }
-
-    while (clipPath.firstChild) {
-      clipPath.removeChild(clipPath.firstChild);
-    }
-
-    clipPath.appendChild(
-      this.buildSvgElement('rect', {
-        height: `${paper.height}`,
-        width: `${paper.width}`,
-        x: `${paper.x}`,
-        y: `${paper.y}`,
-      })
-    );
-
-    return clipPathId;
-  }
-
   private getVisionHitPoint(angle: number): { x1: number; x2: number } {
     const { observerPosition, horizonLineY } = this._state;
     const verticalDistanceToHorizon = observerPosition.y - horizonLineY;
@@ -410,7 +480,7 @@ export class RenderService {
     return element;
   }
 
-  private buildSvgPoint(x: number, y: number, color: string, label?: string): void {
+  private buildSvgPoint(x: number, y: number, color: string, label?: string, labelClass?: string): void {
     const circle = this.buildSvgElement('circle', {
       class: 'point',
       cx: `${x}`,
@@ -422,6 +492,7 @@ export class RenderService {
 
     if (label) {
       const text = this.buildSvgElement('text', {
+        class: labelClass || '',
         fill: 'black',
         'font-size': this._pointRadius,
         x: `${x + 3}`,

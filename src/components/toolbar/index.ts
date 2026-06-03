@@ -1,5 +1,6 @@
 export * from './cubeRotation-range';
 export * from './display-checkboxes';
+export * from './guide-points-distance-range';
 export * from './paperFormat-selector';
 export * from './toolbar';
 export * from './toolbar-checkbox';

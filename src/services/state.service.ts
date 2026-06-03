@@ -3,8 +3,9 @@ import type { PaperFormatsValues } from '../types/paper-format.type';
 export interface State {
   paperFormat: PaperFormatsValues;
   visionAngle: number;
-  displayMeasurePoints: boolean;
+  displayPoints: boolean;
   displayCompletePerspectiveLines: boolean;
+  guidePointsInset: number;
   horizonLineY: number;
   observerPosition: { x: number; y: number };
   vanishingPointLeftX: number;
@@ -15,8 +16,9 @@ export interface State {
 class StateService {
   private _state: State = {
     cubeAngle: 35,
-    displayCompletePerspectiveLines: true,
-    displayMeasurePoints: true,
+    displayCompletePerspectiveLines: false,
+    displayPoints: false,
+    guidePointsInset: 3,
     horizonLineY: 70,
     observerPosition: { x: 100, y: 100 },
     paperFormat: 'landscape',
@@ -37,12 +39,16 @@ class StateService {
     this._state.visionAngle = angle;
   }
 
-  setDisplayMeasurePoints(display: boolean) {
-    this._state.displayMeasurePoints = display;
+  setDisplayPoints(display: boolean) {
+    this._state.displayPoints = display;
   }
 
   setDisplayCompletePerspectiveLines(display: boolean) {
     this._state.displayCompletePerspectiveLines = display;
+  }
+
+  setGuidePointsInset(inset: number) {
+    this._state.guidePointsInset = inset;
   }
 
   setObserverPosition(x: number, y: number) {

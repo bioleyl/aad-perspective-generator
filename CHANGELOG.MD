@@ -10,3 +10,9 @@
 - Ajout de l’affichage de la feuille inscrite dans le cône de vision
 - Ajout de la grille de perspective
 - Ajout de la fonction d'impression
+
+## 03/06/1985
+
+- Ajout des points de traçage
+- Ajout de la marge d'imprimante
+

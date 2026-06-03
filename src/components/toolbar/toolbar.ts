@@ -116,6 +116,9 @@ export class Toolbar extends Jadis {
           <aad-vision-angle-range></aad-vision-angle-range>
         </aad-toolbar-group>
         <aad-toolbar-group>
+          <aad-guide-points-distance-range></aad-guide-points-distance-range>
+        </aad-toolbar-group>
+        <aad-toolbar-group>
           <aad-display-checkboxes></aad-display-checkboxes>
         </aad-toolbar-group>
       </div>
