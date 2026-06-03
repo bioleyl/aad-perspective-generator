@@ -11,12 +11,6 @@ export class App extends Jadis {
     workspace: ref<Workspace>('aad-workspace'),
   }));
 
-  onConnect() {
-    this.refs.toolbar.events.register('print', () => {
-      this.refs.workspace.print();
-    });
-  }
-
   templateHtml() {
     return html`
       <aad-toolbar></aad-toolbar>

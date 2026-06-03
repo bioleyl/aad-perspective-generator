@@ -3,17 +3,27 @@ import { stateService } from './state.service';
 
 import type { State } from './state.service';
 
+type BorderSide = 'left' | 'top' | 'right' | 'bottom';
+
+type BorderHandleId = 'left-top' | 'left-bottom' | 'right-top' | 'right-bottom';
+
+type BorderHandle = {
+  id: BorderHandleId;
+  label: string;
+  side: BorderSide;
+  ratio: number;
+  position: { x: number; y: number };
+};
+
+type Point = { x: number; y: number };
+
 export class RenderService {
   private _layer: SVGGElement;
   private _state: State;
   private _lineWidth = '0.5';
   private _pointRadius = '3';
-  private _printOpacity = 0.5;
-  private _printPointRadiusMm = 0.4;
-  private _printLineWidthMm = 0.2;
   private _visionLineColor = 'green';
   private _perspectiveLineColor = '#666';
-  private _printColor = 'black';
 
   constructor(layer: SVGGElement) {
     this._layer = layer;
@@ -37,97 +47,6 @@ export class RenderService {
     this.drawMeasurePoints();
   }
 
-  print() {
-    const paper = this.getPaperRectGeometry();
-    const { width: mmWidth, height: mmHeight } = PAPER_FORMATS[this._state.paperFormat];
-    const pointRadius = (this._printPointRadiusMm * paper.width) / mmWidth;
-
-    const printSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    printSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    printSvg.setAttribute('width', `${mmWidth}mm`);
-    printSvg.setAttribute('height', `${mmHeight}mm`);
-    printSvg.setAttribute('viewBox', `${paper.x} ${paper.y} ${paper.width} ${paper.height}`);
-    printSvg.setAttribute('opacity', `${this._printOpacity}`);
-
-    const svg = this._layer.ownerSVGElement;
-    if (svg) {
-      const defs = svg.querySelector('defs');
-      if (defs) {
-        printSvg.appendChild(defs.cloneNode(true));
-      }
-    }
-
-    printSvg.appendChild(this._layer.cloneNode(true));
-
-    const orientation = mmWidth > mmHeight ? 'landscape' : 'portrait';
-    const serialized = new XMLSerializer().serializeToString(printSvg);
-
-    const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      html, body {
-        width: ${mmWidth}mm;
-        height: ${mmHeight}mm;
-        overflow: hidden;
-      }
-      body {
-        background: white;
-      }
-      svg {
-        display: block;
-      }
-      .non-printable {
-        display: none;
-      }
-      .point {
-        r: ${pointRadius};
-        fill: ${this._printColor};
-        stroke: none;
-      }
-      text {
-        display: none;
-      }
-      line, circle, rect {
-        stroke: ${this._printColor};
-        stroke-width: ${this._printLineWidthMm}mm;
-        vector-effect: non-scaling-stroke;
-      }
-      @page {
-        size: ${mmWidth}mm ${mmHeight}mm ${orientation};
-        margin: 0;
-      }
-      </style>
-    </head>
-    <body>${serialized}</body>
-    </html>`;
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-
-    const printWindow = window.open(url, '_blank');
-    if (!printWindow) {
-      URL.revokeObjectURL(url);
-      return;
-    }
-
-    printWindow.addEventListener('load', () => {
-      printWindow.focus();
-      printWindow.print();
-    });
-
-    printWindow.addEventListener('afterprint', () => {
-      printWindow.close();
-      URL.revokeObjectURL(url);
-    });
-  }
-
   private clearLayer() {
     this._layer.innerHTML = '';
   }
@@ -149,35 +68,63 @@ export class RenderService {
   }
 
   private drawPerspectiveLines() {
-    const { vanishingPointLeftX, vanishingPointRightX, displayCompletePerspectiveLines } = this._state;
     const paper = this.getPaperRectGeometry();
-    const quarterHalfHeight = paper.height / 8;
-    const upperY = paper.y + paper.height / 2 - quarterHalfHeight;
-    const lowerY = paper.y + paper.height / 2 + quarterHalfHeight;
+    const { displayCompletePerspectiveLines, vanishingPointLeftX, vanishingPointRightX } = this._state;
+    const handles = this.getBorderHandles(paper);
     const perspectiveLines = this.buildSvgElement('g');
 
     if (!displayCompletePerspectiveLines) {
       perspectiveLines.setAttribute('clip-path', `url(#${this.updatePaperClipPath(paper)})`);
     }
 
-    this.drawPerspectiveLine(perspectiveLines, paper.x, upperY, vanishingPointRightX, this._state.horizonLineY);
-    this.drawPerspectiveLine(perspectiveLines, paper.x, lowerY, vanishingPointRightX, this._state.horizonLineY);
     this.drawPerspectiveLine(
       perspectiveLines,
-      paper.x + paper.width,
-      upperY,
+      handles['left-top'].position.x,
+      handles['left-top'].position.y,
+      vanishingPointRightX,
+      this._state.horizonLineY
+    );
+    this.drawPaperCrossingPoint(paper, handles['left-top'].position, {
+      x: vanishingPointRightX,
+      y: this._state.horizonLineY,
+    });
+    this.drawPerspectiveLine(
+      perspectiveLines,
+      handles['left-bottom'].position.x,
+      handles['left-bottom'].position.y,
+      vanishingPointRightX,
+      this._state.horizonLineY
+    );
+    this.drawPaperCrossingPoint(paper, handles['left-bottom'].position, {
+      x: vanishingPointRightX,
+      y: this._state.horizonLineY,
+    });
+    this.drawPerspectiveLine(
+      perspectiveLines,
+      handles['right-top'].position.x,
+      handles['right-top'].position.y,
       vanishingPointLeftX,
       this._state.horizonLineY
     );
+    this.drawPaperCrossingPoint(paper, handles['right-top'].position, {
+      x: vanishingPointLeftX,
+      y: this._state.horizonLineY,
+    });
     this.drawPerspectiveLine(
       perspectiveLines,
-      paper.x + paper.width,
-      lowerY,
+      handles['right-bottom'].position.x,
+      handles['right-bottom'].position.y,
       vanishingPointLeftX,
       this._state.horizonLineY
     );
+    this.drawPaperCrossingPoint(paper, handles['right-bottom'].position, {
+      x: vanishingPointLeftX,
+      y: this._state.horizonLineY,
+    });
 
     this._layer.appendChild(perspectiveLines);
+    this.drawBorderHandles(handles);
+    this.drawHoveredBorderHandleAnnotation(handles);
   }
 
   private computeObserverCoordinates() {
@@ -220,6 +167,63 @@ export class RenderService {
 
     this.buildSvgPoint(vanishingPointLeftX, horizonLineY, 'purple', 'PFG');
     this.buildSvgPoint(vanishingPointRightX, horizonLineY, 'purple', 'PFD');
+  }
+
+  private drawBorderHandles(handles: Record<BorderHandleId, BorderHandle>) {
+    for (const handle of Object.values(handles)) {
+      this.buildSvgBorderHandle(handle.position.x, handle.position.y, handle.id, handle.label);
+    }
+  }
+
+  private drawHoveredBorderHandleAnnotation(handles: Record<BorderHandleId, BorderHandle>) {
+    const { hoveredBorderHandle } = this._state;
+
+    if (!hoveredBorderHandle) {
+      return;
+    }
+
+    const handle = handles[hoveredBorderHandle];
+    if (!handle) {
+      return;
+    }
+
+    const paper = this.getPaperRectGeometry();
+    const intersections = this.getPaperIntersectionPoints(hoveredBorderHandle);
+
+    if (!intersections) {
+      return;
+    }
+
+    const points = [intersections.start, intersections.end];
+
+    for (const point of points) {
+      const paperPoint = this.toPaperSpace(point, paper);
+      const marker = this.buildSvgElement('circle', {
+        class: 'border-crossing-marker',
+        cx: `${point.x}`,
+        cy: `${point.y}`,
+        fill: '#f59e0b',
+        'pointer-events': 'none',
+        r: '2.4',
+        stroke: 'white',
+        'stroke-width': '0.5',
+      });
+      this._layer.appendChild(marker);
+
+      const label = this.buildSvgElement('text', {
+        class: 'border-crossing-label',
+        fill: '#111',
+        'font-size': '3.2',
+        'font-weight': '600',
+        'pointer-events': 'none',
+        'text-anchor': 'middle',
+        x: `${point.x}`,
+        y: `${point.y - 4}`,
+      });
+
+      label.textContent = `${paperPoint.x.toFixed(1)} mm, ${paperPoint.y.toFixed(1)} mm`;
+      this._layer.appendChild(label);
+    }
   }
 
   private drawMeasurePoints() {
@@ -339,7 +343,38 @@ export class RenderService {
     return Math.max(Math.abs(x1 - observerPosition.x), Math.abs(x2 - observerPosition.x));
   }
 
-  private getPaperRectGeometry(): { height: number; width: number; x: number; y: number } {
+  getPaperRectGeometry(): { height: number; width: number; x: number; y: number } {
+    return this.computePaperRectGeometry();
+  }
+
+  getBorderHandlesGeometry(): Record<BorderHandleId, BorderHandle> {
+    return this.getBorderHandles(this.getPaperRectGeometry());
+  }
+
+  getPaperIntersectionPoints(handleId: BorderHandleId): { start: Point; end: Point } | null {
+    const paper = this.getPaperRectGeometry();
+    const handles = this.getBorderHandles(paper);
+    const handle = handles[handleId];
+
+    if (!handle) {
+      return null;
+    }
+
+    const target =
+      handleId === 'left-top' || handleId === 'left-bottom'
+        ? { x: this._state.vanishingPointRightX, y: this._state.horizonLineY }
+        : { x: this._state.vanishingPointLeftX, y: this._state.horizonLineY };
+
+    const intersections = this.getLineRectangleIntersections(handle.position, target, paper);
+
+    if (intersections.length < 2) {
+      return null;
+    }
+
+    return { end: intersections[1], start: intersections[0] };
+  }
+
+  private computePaperRectGeometry(): { height: number; width: number; x: number; y: number } {
     const { observerPosition, horizonLineY } = this._state;
     const { width, height } = PAPER_FORMATS[this._state.paperFormat];
 
@@ -392,6 +427,171 @@ export class RenderService {
     return clipPathId;
   }
 
+  private getBorderHandles(paper: {
+    height: number;
+    width: number;
+    x: number;
+    y: number;
+  }): Record<BorderHandleId, BorderHandle> {
+    const { borderHandles } = this._state;
+
+    return {
+      'left-bottom': {
+        id: 'left-bottom',
+        label: 'LB',
+        position: this.getBorderHandlePosition(
+          paper,
+          borderHandles['left-bottom'].side,
+          borderHandles['left-bottom'].ratio
+        ),
+        ratio: borderHandles['left-bottom'].ratio,
+        side: borderHandles['left-bottom'].side,
+      },
+      'left-top': {
+        id: 'left-top',
+        label: 'LT',
+        position: this.getBorderHandlePosition(
+          paper,
+          borderHandles['left-top'].side,
+          borderHandles['left-top'].ratio
+        ),
+        ratio: borderHandles['left-top'].ratio,
+        side: borderHandles['left-top'].side,
+      },
+      'right-bottom': {
+        id: 'right-bottom',
+        label: 'RB',
+        position: this.getBorderHandlePosition(
+          paper,
+          borderHandles['right-bottom'].side,
+          borderHandles['right-bottom'].ratio
+        ),
+        ratio: borderHandles['right-bottom'].ratio,
+        side: borderHandles['right-bottom'].side,
+      },
+      'right-top': {
+        id: 'right-top',
+        label: 'RT',
+        position: this.getBorderHandlePosition(
+          paper,
+          borderHandles['right-top'].side,
+          borderHandles['right-top'].ratio
+        ),
+        ratio: borderHandles['right-top'].ratio,
+        side: borderHandles['right-top'].side,
+      },
+    };
+  }
+
+  private getBorderHandlePosition(
+    paper: { height: number; width: number; x: number; y: number },
+    side: BorderSide,
+    ratio: number
+  ): { x: number; y: number } {
+    if (side === 'left') {
+      return { x: paper.x, y: paper.y + paper.height * ratio };
+    }
+
+    if (side === 'right') {
+      return { x: paper.x + paper.width, y: paper.y + paper.height * ratio };
+    }
+
+    if (side === 'top') {
+      return { x: paper.x + paper.width * ratio, y: paper.y };
+    }
+
+    return { x: paper.x + paper.width * ratio, y: paper.y + paper.height };
+  }
+
+  private buildSvgBorderHandle(x: number, y: number, id: BorderHandleId, label: string): void {
+    const group = this.buildSvgElement('g', {
+      class: 'border-handle',
+      'data-draggable-handle': 'true',
+      'data-handle-id': id,
+      'data-handle-label': label,
+    });
+
+    const circle = this.buildSvgElement('circle', {
+      cx: `${x}`,
+      cy: `${y}`,
+      fill: '#111',
+      r: '4',
+      stroke: 'white',
+      'stroke-width': '1',
+    });
+    group.appendChild(circle);
+    this._layer.appendChild(group);
+  }
+
+  private drawPaperCrossingPoint(
+    paper: { height: number; width: number; x: number; y: number },
+    start: Point,
+    target: Point
+  ) {
+    const intersections = this.getLineRectangleIntersections(start, target, paper);
+
+    for (const point of intersections) {
+      if (Math.hypot(point.x - start.x, point.y - start.y) <= 0.1) {
+        continue;
+      }
+
+      const circle = this.buildSvgElement('circle', {
+        cx: `${point.x}`,
+        cy: `${point.y}`,
+        fill: 'orange',
+        r: '2.5',
+        stroke: 'white',
+        'stroke-width': '0.6',
+      });
+      this._layer.appendChild(circle);
+      break;
+    }
+  }
+
+  private getLineRectangleIntersections(
+    start: Point,
+    target: Point,
+    paper: { x: number; y: number; width: number; height: number }
+  ): Point[] {
+    const minX = paper.x;
+    const maxX = paper.x + paper.width;
+    const minY = paper.y;
+    const maxY = paper.y + paper.height;
+    const dx = target.x - start.x;
+    const dy = target.y - start.y;
+    const candidates: Point[] = [];
+
+    const addCandidate = (t: number) => {
+      const x = start.x + dx * t;
+      const y = start.y + dy * t;
+      if (x >= minX - 0.001 && x <= maxX + 0.001 && y >= minY - 0.001 && y <= maxY + 0.001) {
+        candidates.push({ x, y });
+      }
+    };
+
+    if (Math.abs(dx) > 0.0001) {
+      addCandidate((minX - start.x) / dx);
+      addCandidate((maxX - start.x) / dx);
+    }
+
+    if (Math.abs(dy) > 0.0001) {
+      addCandidate((minY - start.y) / dy);
+      addCandidate((maxY - start.y) / dy);
+    }
+
+    const unique: Point[] = [];
+    for (const point of candidates) {
+      if (!unique.some((existing) => Math.hypot(existing.x - point.x, existing.y - point.y) <= 0.1)) {
+        unique.push(point);
+      }
+    }
+
+    return unique.sort(
+      (left, right) =>
+        Math.hypot(left.x - start.x, left.y - start.y) - Math.hypot(right.x - start.x, right.y - start.y)
+    );
+  }
+
   private getVisionHitPoint(angle: number): { x1: number; x2: number } {
     const { observerPosition, horizonLineY } = this._state;
     const verticalDistanceToHorizon = observerPosition.y - horizonLineY;
@@ -408,6 +608,15 @@ export class RenderService {
       element.setAttribute(key, value);
     }
     return element;
+  }
+
+  private toPaperSpace(point: Point, paper: { x: number; y: number; width: number; height: number }): Point {
+    const { width, height } = PAPER_FORMATS[this._state.paperFormat];
+
+    return {
+      x: ((point.x - paper.x) / paper.width) * width,
+      y: height - ((point.y - paper.y) / paper.height) * height,
+    };
   }
 
   private buildSvgPoint(x: number, y: number, color: string, label?: string): void {
