@@ -1,4 +1,4 @@
-import { PAPER_FORMATS } from '../types/paper-format.type';
+import { getPaperDimensions } from '../types/paper-format.type';
 import { stateService } from './state.service';
 
 import type { State } from './state.service';
@@ -6,6 +6,15 @@ import type { State } from './state.service';
 type BorderSide = 'left' | 'top' | 'right' | 'bottom';
 
 type BorderHandleId = 'left-top' | 'left-bottom' | 'right-top' | 'right-bottom';
+
+const PERSPECTIVE_LINE_ORDER: BorderHandleId[] = ['left-top', 'left-bottom', 'right-top', 'right-bottom'];
+
+const PERSPECTIVE_LINE_LABELS: Record<BorderHandleId, string> = {
+  'left-bottom': 'B',
+  'left-top': 'A',
+  'right-bottom': 'D',
+  'right-top': 'C',
+};
 
 type BorderHandle = {
   id: BorderHandleId;
@@ -17,11 +26,23 @@ type BorderHandle = {
 
 type Point = { x: number; y: number };
 
+export interface PerspectiveLineDimensions {
+  lineLabel: string;
+  point: { label: string; x: number; y: number };
+  primePoint: { label: string; x: number; y: number };
+}
+
+export interface TablePointDimensions {
+  label: string;
+  x: number;
+  y: number;
+}
+
 export class RenderService {
   private _layer: SVGGElement;
   private _state: State;
   private _lineWidth = '0.5';
-  private _pointRadius = '3';
+  private _pointRadius = '1';
   private _visionLineColor = 'green';
   private _perspectiveLineColor = '#666';
 
@@ -37,14 +58,15 @@ export class RenderService {
 
     this.clearLayer();
     this.drawPaper();
-    this.drawPerspectiveLines();
-    this.drawHorizonLine();
-    this.drawVisionAngle();
+    this.drawPaperAxesReference();
+    // this.drawVisionAngle();
     this.drawVisionCircle();
-    this.drawObserver();
+    // this.drawObserver();
+    this.drawHorizonLine();
     this.drawPrinciplePoint();
     this.drawVanishingPoints();
     this.drawMeasurePoints();
+    this.drawPerspectiveLines();
   }
 
   private clearLayer() {
@@ -67,15 +89,113 @@ export class RenderService {
     this._layer.appendChild(rect);
   }
 
+  private drawPaperAxesReference() {
+    const paper = this.getPaperRectGeometry();
+    const origin = {
+      x: paper.x - 12,
+      y: paper.y + paper.height + 12,
+    };
+    const axisLength = 14;
+
+    const axisGroup = this.buildSvgElement('g', {
+      class: 'paper-axes-reference',
+      'pointer-events': 'none',
+    });
+
+    const xEnd = { x: origin.x + axisLength, y: origin.y };
+    const yEnd = { x: origin.x, y: origin.y - axisLength };
+
+    axisGroup.appendChild(
+      this.buildSvgElement('line', {
+        stroke: '#111',
+        'stroke-width': this._lineWidth,
+        x1: `${origin.x}`,
+        x2: `${xEnd.x}`,
+        y1: `${origin.y}`,
+        y2: `${xEnd.y}`,
+      })
+    );
+
+    axisGroup.appendChild(
+      this.buildSvgElement('line', {
+        stroke: '#111',
+        'stroke-width': this._lineWidth,
+        x1: `${origin.x}`,
+        x2: `${yEnd.x}`,
+        y1: `${origin.y}`,
+        y2: `${yEnd.y}`,
+      })
+    );
+
+    axisGroup.appendChild(
+      this.buildSvgElement('polygon', {
+        fill: '#111',
+        points: `${xEnd.x},${xEnd.y} ${xEnd.x - 2},${xEnd.y - 1} ${xEnd.x - 2},${xEnd.y + 1}`,
+      })
+    );
+
+    axisGroup.appendChild(
+      this.buildSvgElement('polygon', {
+        fill: '#111',
+        points: `${yEnd.x},${yEnd.y} ${yEnd.x - 1},${yEnd.y + 2} ${yEnd.x + 1},${yEnd.y + 2}`,
+      })
+    );
+
+    const originLabel = this.buildSvgElement('text', {
+      fill: '#111',
+      'font-size': '3',
+      'font-weight': '600',
+      x: `${origin.x - 3.2}`,
+      y: `${origin.y + 3.6}`,
+    });
+    originLabel.textContent = 'O';
+    axisGroup.appendChild(originLabel);
+
+    const xLabel = this.buildSvgElement('text', {
+      fill: '#111',
+      'font-size': '3',
+      'font-weight': '700',
+      x: `${xEnd.x + 1.4}`,
+      y: `${xEnd.y + 1.4}`,
+    });
+    xLabel.textContent = 'X';
+    axisGroup.appendChild(xLabel);
+
+    const yLabel = this.buildSvgElement('text', {
+      fill: '#111',
+      'font-size': '3',
+      'font-weight': '700',
+      x: `${yEnd.x - 1.8}`,
+      y: `${yEnd.y - 1.2}`,
+    });
+    yLabel.textContent = 'Y';
+    axisGroup.appendChild(yLabel);
+
+    axisGroup.appendChild(
+      this.buildSvgElement('circle', {
+        cx: `${origin.x}`,
+        cy: `${origin.y}`,
+        fill: '#111',
+        r: '0.8',
+      })
+    );
+
+    this._layer.appendChild(axisGroup);
+  }
+
   private drawPerspectiveLines() {
     const paper = this.getPaperRectGeometry();
     const { displayCompletePerspectiveLines, vanishingPointLeftX, vanishingPointRightX } = this._state;
     const handles = this.getBorderHandles(paper);
-    const perspectiveLines = this.buildSvgElement('g');
 
     if (!displayCompletePerspectiveLines) {
-      perspectiveLines.setAttribute('clip-path', `url(#${this.updatePaperClipPath(paper)})`);
+      this.drawBorderHandles(handles);
+      this.drawPerspectivePointMarkers(paper);
+      this.drawPerspectivePointLabels(paper);
+      return;
     }
+
+    const perspectiveLines = this.buildSvgElement('g');
 
     this.drawPerspectiveLine(
       perspectiveLines,
@@ -84,10 +204,6 @@ export class RenderService {
       vanishingPointRightX,
       this._state.horizonLineY
     );
-    this.drawPaperCrossingPoint(paper, handles['left-top'].position, {
-      x: vanishingPointRightX,
-      y: this._state.horizonLineY,
-    });
     this.drawPerspectiveLine(
       perspectiveLines,
       handles['left-bottom'].position.x,
@@ -95,10 +211,6 @@ export class RenderService {
       vanishingPointRightX,
       this._state.horizonLineY
     );
-    this.drawPaperCrossingPoint(paper, handles['left-bottom'].position, {
-      x: vanishingPointRightX,
-      y: this._state.horizonLineY,
-    });
     this.drawPerspectiveLine(
       perspectiveLines,
       handles['right-top'].position.x,
@@ -106,10 +218,6 @@ export class RenderService {
       vanishingPointLeftX,
       this._state.horizonLineY
     );
-    this.drawPaperCrossingPoint(paper, handles['right-top'].position, {
-      x: vanishingPointLeftX,
-      y: this._state.horizonLineY,
-    });
     this.drawPerspectiveLine(
       perspectiveLines,
       handles['right-bottom'].position.x,
@@ -117,20 +225,26 @@ export class RenderService {
       vanishingPointLeftX,
       this._state.horizonLineY
     );
-    this.drawPaperCrossingPoint(paper, handles['right-bottom'].position, {
-      x: vanishingPointLeftX,
-      y: this._state.horizonLineY,
-    });
 
     this._layer.appendChild(perspectiveLines);
     this.drawBorderHandles(handles);
-    this.drawHoveredBorderHandleAnnotation(handles);
+    this.drawPerspectivePointMarkers(paper);
+    this.drawPerspectivePointLabels(paper);
   }
 
   private computeObserverCoordinates() {
-    const { cubeAngle, vanishingPointLeftX, vanishingPointRightX, horizonLineY } = this._state;
+    const {
+      cubeAngle,
+      cubeAngleMinutes,
+      cubeAngleSeconds,
+      vanishingPointLeftX,
+      vanishingPointRightX,
+      horizonLineY,
+    } = this._state;
 
-    const radianCubeAngle = (cubeAngle * Math.PI) / 180;
+    const fullCubeAngle = cubeAngle + cubeAngleMinutes / 60 + cubeAngleSeconds / 3600;
+
+    const radianCubeAngle = (fullCubeAngle * Math.PI) / 180;
     const vanishingPointsDistance = vanishingPointRightX - vanishingPointLeftX;
     const sin = Math.sin(radianCubeAngle);
     const cos = Math.cos(radianCubeAngle);
@@ -157,11 +271,6 @@ export class RenderService {
     this._layer.appendChild(line);
   }
 
-  private drawObserver() {
-    const { observerPosition } = this._state;
-    this.buildSvgPoint(observerPosition.x, observerPosition.y, 'red', 'PAO');
-  }
-
   private drawVanishingPoints() {
     const { vanishingPointLeftX, vanishingPointRightX, horizonLineY } = this._state;
 
@@ -175,54 +284,35 @@ export class RenderService {
     }
   }
 
-  private drawHoveredBorderHandleAnnotation(handles: Record<BorderHandleId, BorderHandle>) {
-    const { hoveredBorderHandle } = this._state;
+  private drawPerspectivePointLabels(paper: { x: number; y: number; width: number; height: number }) {
+    const dimensions = this.getPerspectiveLineDimensions();
 
-    if (!hoveredBorderHandle) {
-      return;
+    for (const { point, primePoint } of dimensions) {
+      this.drawExteriorPointLabel(this.toCanvasSpace(point, paper), point.label, paper);
+      this.drawExteriorPointLabel(this.toCanvasSpace(primePoint, paper), primePoint.label, paper);
     }
+  }
 
-    const handle = handles[hoveredBorderHandle];
-    if (!handle) {
-      return;
-    }
+  private drawPerspectivePointMarkers(paper: { x: number; y: number; width: number; height: number }) {
+    const dimensions = this.getPerspectiveLineDimensions();
 
-    const paper = this.getPaperRectGeometry();
-    const intersections = this.getPaperIntersectionPoints(hoveredBorderHandle);
+    for (const { point, primePoint } of dimensions) {
+      const points = [point, primePoint];
 
-    if (!intersections) {
-      return;
-    }
-
-    const points = [intersections.start, intersections.end];
-
-    for (const point of points) {
-      const paperPoint = this.toPaperSpace(point, paper);
-      const marker = this.buildSvgElement('circle', {
-        class: 'border-crossing-marker',
-        cx: `${point.x}`,
-        cy: `${point.y}`,
-        fill: '#f59e0b',
-        'pointer-events': 'none',
-        r: '2.4',
-        stroke: 'white',
-        'stroke-width': '0.5',
-      });
-      this._layer.appendChild(marker);
-
-      const label = this.buildSvgElement('text', {
-        class: 'border-crossing-label',
-        fill: '#111',
-        'font-size': '3.2',
-        'font-weight': '600',
-        'pointer-events': 'none',
-        'text-anchor': 'middle',
-        x: `${point.x}`,
-        y: `${point.y - 4}`,
-      });
-
-      label.textContent = `${paperPoint.x.toFixed(1)} mm, ${paperPoint.y.toFixed(1)} mm`;
-      this._layer.appendChild(label);
+      for (const perspectivePoint of points) {
+        const canvasPoint = this.toCanvasSpace(perspectivePoint, paper);
+        const marker = this.buildSvgElement('circle', {
+          class: 'perspective-point-marker',
+          cx: `${canvasPoint.x}`,
+          cy: `${canvasPoint.y}`,
+          fill: '#f59e0b',
+          'pointer-events': 'none',
+          r: '2.2',
+          stroke: 'white',
+          'stroke-width': '0.5',
+        });
+        this._layer.appendChild(marker);
+      }
     }
   }
 
@@ -273,40 +363,11 @@ export class RenderService {
     this.buildSvgPoint(observerPosition.x, horizonLineY, 'blue', 'PP');
   }
 
-  private drawVisionAngle() {
-    const { visionAngle, observerPosition, horizonLineY } = this._state;
-
-    const { x1, x2 } = this.getVisionHitPoint(visionAngle);
-
-    const line1 = this.buildSvgElement('line', {
-      class: 'non-printable',
-      stroke: this._visionLineColor,
-      'stroke-width': this._lineWidth,
-      x1: `${observerPosition.x}`,
-      x2: `${x1}`,
-      y1: `${observerPosition.y}`,
-      y2: `${horizonLineY}`,
-    });
-
-    const line2 = this.buildSvgElement('line', {
-      class: 'non-printable',
-      stroke: this._visionLineColor,
-      'stroke-width': this._lineWidth,
-      x1: `${observerPosition.x}`,
-      x2: `${x2}`,
-      y1: `${observerPosition.y}`,
-      y2: `${horizonLineY}`,
-    });
-
-    this._layer.appendChild(line1);
-    this._layer.appendChild(line2);
-  }
-
   private drawVisionCircle() {
     const { observerPosition, horizonLineY } = this._state;
     const radius = this.getVisionCircleRadius();
     const circle = this.buildSvgElement('circle', {
-      class: 'non-printable',
+      class: 'non-printable vision-circle',
       cx: `${observerPosition.x}`,
       cy: `${horizonLineY}`,
       fill: 'none',
@@ -360,10 +421,7 @@ export class RenderService {
       return null;
     }
 
-    const target =
-      handleId === 'left-top' || handleId === 'left-bottom'
-        ? { x: this._state.vanishingPointRightX, y: this._state.horizonLineY }
-        : { x: this._state.vanishingPointLeftX, y: this._state.horizonLineY };
+    const target = this.getVanishingTargetForHandle(handleId);
 
     const intersections = this.getLineRectangleIntersections(handle.position, target, paper);
 
@@ -374,9 +432,27 @@ export class RenderService {
     return { end: intersections[1], start: intersections[0] };
   }
 
+  getPerspectiveLineDimensions(): PerspectiveLineDimensions[] {
+    const paper = this.getPaperRectGeometry();
+
+    return PERSPECTIVE_LINE_ORDER.map((handleId) =>
+      this.getPerspectiveLineDimensionsForHandle(handleId, paper)
+    ).filter((line): line is PerspectiveLineDimensions => line !== null);
+  }
+
+  getTablePoints(): TablePointDimensions[] {
+    const perspectivePoints = this.getPerspectiveLineDimensions().flatMap(({ point, primePoint }) => [
+      point,
+      primePoint,
+    ]);
+    const auxiliaryPoints = this.getAuxiliaryPointsInPaper();
+
+    return [...perspectivePoints, ...auxiliaryPoints];
+  }
+
   private computePaperRectGeometry(): { height: number; width: number; x: number; y: number } {
     const { observerPosition, horizonLineY } = this._state;
-    const { width, height } = PAPER_FORMATS[this._state.paperFormat];
+    const { width, height } = getPaperDimensions(this._state.paperSize, this._state.paperOrientation);
 
     const ratio = width / height;
     const radius = this.getVisionCircleRadius();
@@ -391,42 +467,6 @@ export class RenderService {
     };
   }
 
-  private updatePaperClipPath(paper: { height: number; width: number; x: number; y: number }): string {
-    const clipPathId = 'paper-clip-path';
-    const svg = this._layer.ownerSVGElement;
-
-    if (!svg) {
-      return clipPathId;
-    }
-
-    let defs = svg.querySelector('defs') as SVGElement | null;
-    if (!defs) {
-      defs = this.buildSvgElement('defs');
-      svg.insertBefore(defs, svg.firstChild);
-    }
-
-    let clipPath = svg.querySelector(`#${clipPathId}`) as SVGElement | null;
-    if (!clipPath) {
-      clipPath = this.buildSvgElement('clipPath', { id: clipPathId });
-      defs.appendChild(clipPath);
-    }
-
-    while (clipPath.firstChild) {
-      clipPath.removeChild(clipPath.firstChild);
-    }
-
-    clipPath.appendChild(
-      this.buildSvgElement('rect', {
-        height: `${paper.height}`,
-        width: `${paper.width}`,
-        x: `${paper.x}`,
-        y: `${paper.y}`,
-      })
-    );
-
-    return clipPathId;
-  }
-
   private getBorderHandles(paper: {
     height: number;
     width: number;
@@ -438,7 +478,7 @@ export class RenderService {
     return {
       'left-bottom': {
         id: 'left-bottom',
-        label: 'LB',
+        label: PERSPECTIVE_LINE_LABELS['left-bottom'],
         position: this.getBorderHandlePosition(
           paper,
           borderHandles['left-bottom'].side,
@@ -449,7 +489,7 @@ export class RenderService {
       },
       'left-top': {
         id: 'left-top',
-        label: 'LT',
+        label: PERSPECTIVE_LINE_LABELS['left-top'],
         position: this.getBorderHandlePosition(
           paper,
           borderHandles['left-top'].side,
@@ -460,7 +500,7 @@ export class RenderService {
       },
       'right-bottom': {
         id: 'right-bottom',
-        label: 'RB',
+        label: PERSPECTIVE_LINE_LABELS['right-bottom'],
         position: this.getBorderHandlePosition(
           paper,
           borderHandles['right-bottom'].side,
@@ -471,7 +511,7 @@ export class RenderService {
       },
       'right-top': {
         id: 'right-top',
-        label: 'RT',
+        label: PERSPECTIVE_LINE_LABELS['right-top'],
         position: this.getBorderHandlePosition(
           paper,
           borderHandles['right-top'].side,
@@ -521,31 +561,6 @@ export class RenderService {
     });
     group.appendChild(circle);
     this._layer.appendChild(group);
-  }
-
-  private drawPaperCrossingPoint(
-    paper: { height: number; width: number; x: number; y: number },
-    start: Point,
-    target: Point
-  ) {
-    const intersections = this.getLineRectangleIntersections(start, target, paper);
-
-    for (const point of intersections) {
-      if (Math.hypot(point.x - start.x, point.y - start.y) <= 0.1) {
-        continue;
-      }
-
-      const circle = this.buildSvgElement('circle', {
-        cx: `${point.x}`,
-        cy: `${point.y}`,
-        fill: 'orange',
-        r: '2.5',
-        stroke: 'white',
-        'stroke-width': '0.6',
-      });
-      this._layer.appendChild(circle);
-      break;
-    }
   }
 
   private getLineRectangleIntersections(
@@ -611,12 +626,230 @@ export class RenderService {
   }
 
   private toPaperSpace(point: Point, paper: { x: number; y: number; width: number; height: number }): Point {
-    const { width, height } = PAPER_FORMATS[this._state.paperFormat];
+    const { width, height } = getPaperDimensions(this._state.paperSize, this._state.paperOrientation);
 
     return {
       x: ((point.x - paper.x) / paper.width) * width,
       y: height - ((point.y - paper.y) / paper.height) * height,
     };
+  }
+
+  private toCanvasSpace(point: Point, paper: { x: number; y: number; width: number; height: number }): Point {
+    const { width, height } = getPaperDimensions(this._state.paperSize, this._state.paperOrientation);
+
+    return {
+      x: paper.x + (point.x / width) * paper.width,
+      y: paper.y + ((height - point.y) / height) * paper.height,
+    };
+  }
+
+  private drawExteriorPointLabel(
+    point: Point,
+    labelText: string,
+    paper: { x: number; y: number; width: number; height: number }
+  ) {
+    const leftDistance = Math.abs(point.x - paper.x);
+    const rightDistance = Math.abs(point.x - (paper.x + paper.width));
+    const topDistance = Math.abs(point.y - paper.y);
+    const bottomDistance = Math.abs(point.y - (paper.y + paper.height));
+
+    let labelX = point.x;
+    let labelY = point.y;
+    let anchor: 'start' | 'middle' | 'end' = 'middle';
+    const offset = 5;
+
+    const minDistance = Math.min(leftDistance, rightDistance, topDistance, bottomDistance);
+
+    if (minDistance === leftDistance) {
+      labelX -= offset;
+      anchor = 'end';
+    } else if (minDistance === rightDistance) {
+      labelX += offset;
+      anchor = 'start';
+    } else if (minDistance === topDistance) {
+      labelY -= offset;
+    } else {
+      labelY += offset + 1;
+    }
+
+    const adjustedPosition = this.adjustLabelPositionInViewBox(point, { anchor, x: labelX, y: labelY });
+
+    const circleRadius = 2.8 + Math.max(0, labelText.length - 1) * 0.9;
+    const labelCenterX =
+      adjustedPosition.anchor === 'start'
+        ? adjustedPosition.x + circleRadius * 0.55
+        : adjustedPosition.anchor === 'end'
+          ? adjustedPosition.x - circleRadius * 0.55
+          : adjustedPosition.x;
+    const labelCenterY = adjustedPosition.y - 1.1;
+
+    const backgroundCircle = this.buildSvgElement('circle', {
+      class: 'perspective-point-label-bg',
+      cx: `${labelCenterX}`,
+      cy: `${labelCenterY}`,
+      fill: 'white',
+      'pointer-events': 'none',
+      r: `${circleRadius}`,
+    });
+    this._layer.appendChild(backgroundCircle);
+
+    const text = this.buildSvgElement('text', {
+      class: 'perspective-point-label',
+      fill: '#111',
+      'font-size': '3.2',
+      'font-weight': '700',
+      'pointer-events': 'none',
+      'text-anchor': adjustedPosition.anchor,
+      x: `${adjustedPosition.x}`,
+      y: `${adjustedPosition.y}`,
+    });
+    text.textContent = labelText;
+    this._layer.appendChild(text);
+  }
+
+  private adjustLabelPositionInViewBox(
+    point: Point,
+    position: { x: number; y: number; anchor: 'start' | 'middle' | 'end' }
+  ): { x: number; y: number; anchor: 'start' | 'middle' | 'end' } {
+    const svg = this._layer.ownerSVGElement;
+    if (!svg) {
+      return position;
+    }
+
+    const viewBox = svg.viewBox.baseVal;
+    const padding = 3;
+    const offset = 5;
+    let { x, y, anchor } = position;
+
+    if (anchor === 'end' && x < viewBox.x + padding) {
+      x = point.x + offset;
+      anchor = 'start';
+    } else if (anchor === 'start' && x > viewBox.x + viewBox.width - padding) {
+      x = point.x - offset;
+      anchor = 'end';
+    }
+
+    if (y < viewBox.y + padding) {
+      y = point.y + offset + 1;
+    } else if (y > viewBox.y + viewBox.height - padding) {
+      y = point.y - offset;
+    }
+
+    return { anchor, x, y };
+  }
+
+  private getVanishingTargetForHandle(handleId: BorderHandleId): Point {
+    if (handleId === 'left-top' || handleId === 'left-bottom') {
+      return { x: this._state.vanishingPointRightX, y: this._state.horizonLineY };
+    }
+
+    return { x: this._state.vanishingPointLeftX, y: this._state.horizonLineY };
+  }
+
+  private getPerspectiveLineDimensionsForHandle(
+    handleId: BorderHandleId,
+    paper: { x: number; y: number; width: number; height: number }
+  ): PerspectiveLineDimensions | null {
+    const intersections = this.getPaperIntersectionPoints(handleId);
+
+    if (!intersections) {
+      return null;
+    }
+
+    const lineLabel = PERSPECTIVE_LINE_LABELS[handleId];
+    const vanishingTarget = this.getVanishingTargetForHandle(handleId);
+    const startDistanceToVanishingPoint = Math.hypot(
+      intersections.start.x - vanishingTarget.x,
+      intersections.start.y - vanishingTarget.y
+    );
+    const endDistanceToVanishingPoint = Math.hypot(
+      intersections.end.x - vanishingTarget.x,
+      intersections.end.y - vanishingTarget.y
+    );
+
+    const primePointCanvas =
+      startDistanceToVanishingPoint <= endDistanceToVanishingPoint ? intersections.start : intersections.end;
+    const pointCanvas =
+      startDistanceToVanishingPoint <= endDistanceToVanishingPoint ? intersections.end : intersections.start;
+
+    const point = this.toPaperSpace(pointCanvas, paper);
+    const primePoint = this.toPaperSpace(primePointCanvas, paper);
+
+    return {
+      lineLabel,
+      point: { label: lineLabel, x: point.x, y: point.y },
+      primePoint: { label: `${lineLabel}′`, x: primePoint.x, y: primePoint.y },
+    };
+  }
+
+  private getAuxiliaryPointsInPaper(): TablePointDimensions[] {
+    const paper = this.getPaperRectGeometry();
+    const { observerPosition, horizonLineY, vanishingPointLeftX, vanishingPointRightX } = this._state;
+    const distanceLeftToObserver = Math.hypot(
+      observerPosition.x - vanishingPointLeftX,
+      observerPosition.y - horizonLineY
+    );
+    const distanceRightToObserver = Math.hypot(
+      observerPosition.x - vanishingPointRightX,
+      observerPosition.y - horizonLineY
+    );
+
+    const candidatePoints: Array<{ label: string; canvasPoint: Point }> = [
+      {
+        canvasPoint: {
+          x: observerPosition.x,
+          y: horizonLineY,
+        },
+        label: 'PP',
+      },
+      {
+        canvasPoint: {
+          x: this.getMeasurePointX(vanishingPointLeftX, Math.PI / 4),
+          y: horizonLineY,
+        },
+        label: 'PM45',
+      },
+      {
+        canvasPoint: {
+          x: vanishingPointLeftX + distanceLeftToObserver,
+          y: horizonLineY,
+        },
+        label: 'PMG',
+      },
+      {
+        canvasPoint: {
+          x: vanishingPointRightX - distanceRightToObserver,
+          y: horizonLineY,
+        },
+        label: 'PMD',
+      },
+    ];
+
+    return candidatePoints
+      .filter(({ canvasPoint }) => this.isPointInsidePaper(canvasPoint, paper))
+      .map(({ label, canvasPoint }) => {
+        const paperPoint = this.toPaperSpace(canvasPoint, paper);
+
+        return {
+          label,
+          x: paperPoint.x,
+          y: paperPoint.y,
+        };
+      });
+  }
+
+  private isPointInsidePaper(
+    point: Point,
+    paper: { x: number; y: number; width: number; height: number }
+  ): boolean {
+    const epsilon = 0.001;
+
+    return (
+      point.x >= paper.x - epsilon
+      && point.x <= paper.x + paper.width + epsilon
+      && point.y >= paper.y - epsilon
+      && point.y <= paper.y + paper.height + epsilon
+    );
   }
 
   private buildSvgPoint(x: number, y: number, color: string, label?: string): void {
@@ -632,9 +865,9 @@ export class RenderService {
     if (label) {
       const text = this.buildSvgElement('text', {
         fill: 'black',
-        'font-size': this._pointRadius,
-        x: `${x + 3}`,
-        y: `${y - 3}`,
+        'font-size': `${Number(this._pointRadius) * 3}`,
+        x: `${x + 2}`,
+        y: `${y - 2}`,
       });
       text.textContent = label || '';
       this._layer.appendChild(text);

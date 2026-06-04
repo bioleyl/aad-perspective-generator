@@ -21,7 +21,7 @@ export class DisplayCheckboxes extends Jadis {
     createElement(
       ToolbarCheckbox,
       {
-        props: { checked: displayCompletePerspectiveLines, label: 'Afficher les lignes de perspective complètes' },
+        props: { checked: displayCompletePerspectiveLines, label: 'Afficher les lignes de perspectives' },
       },
       group
     ).events.register('change', (checked) => stateService.setDisplayCompletePerspectiveLines(checked));

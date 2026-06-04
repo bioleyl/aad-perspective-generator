@@ -3,6 +3,8 @@ import { assert, css, html, Jadis } from '@jadis/core';
 import { RenderService } from '../services/render.service';
 import { stateService } from '../services/state.service';
 
+import type { TablePointDimensions } from '../services/render.service';
+
 type BorderSide = 'left' | 'top' | 'right' | 'bottom';
 
 type BorderHandleId = 'left-top' | 'left-bottom' | 'right-top' | 'right-bottom';
@@ -22,6 +24,10 @@ export class Workspace extends Jadis {
   private _renderService: RenderService | null = null;
   private _draggingHandle: 'left-top' | 'left-bottom' | 'right-top' | 'right-bottom' | null = null;
 
+  readonly refs = this.useRefs((ref) => ({
+    perspectiveDimensionsBody: ref<HTMLTableSectionElement>('.perspective-dimensions-body'),
+  }));
+
   onConnect() {
     this._paper = this.shadowRoot?.querySelector('.paper') || null;
     this._layer = this._paper?.querySelector('#drawing-layer') || null;
@@ -40,6 +46,19 @@ export class Workspace extends Jadis {
         <svg class="paper" width="297mm" height="210mm" viewBox="0 0 297 210">
           <g id="drawing-layer"></g>
         </svg>
+        <div class="dimensions-panel">
+          <h3>Lignes de perspective</h3>
+          <table class="dimensions-table">
+            <thead>
+              <tr>
+                <th>Point</th>
+                <th>X (mm)</th>
+                <th>Y (mm)</th>
+              </tr>
+            </thead>
+            <tbody class="perspective-dimensions-body"></tbody>
+          </table>
+        </div>
       </div>
     `;
   }
@@ -48,9 +67,51 @@ export class Workspace extends Jadis {
     return css`
       .workspace {
         display: flex;
+        gap: 20px;
         justify-content: center;
+        align-items: flex-start;
         padding: 20px;
       }
+
+      .dimensions-panel {
+        background: #fff;
+        border: 1px solid #ccc;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.08);
+        min-width: 260px;
+        padding: 10px;
+      }
+
+      .dimensions-panel h3 {
+        font-size: 14px;
+        margin: 0 0 8px;
+      }
+
+      .dimensions-table {
+        border-collapse: collapse;
+        font-size: 12px;
+        width: 100%;
+      }
+
+      .dimensions-table th,
+      .dimensions-table td {
+        border: 1px solid #ddd;
+        padding: 4px 6px;
+        text-align: left;
+      }
+
+      .dimensions-table td:first-child {
+        font-weight: 700;
+      }
+
+      .perspective-dimensions-body td {
+        font-size: 13px;
+      }
+
+      .perspective-dimensions-body td:nth-child(2),
+      .perspective-dimensions-body td:nth-child(3) {
+        text-align: right;
+      }
+
       .paper {
         background: white;
         box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
@@ -67,10 +128,16 @@ export class Workspace extends Jadis {
         cursor: grabbing;
       }
 
+      .vision-circle {
+        opacity: 0.3;
+      }
+
       @media (hover: none) and (pointer: coarse) {
         .workspace {
           padding: 5px;
           overflow: auto;
+          flex-direction: column;
+          align-items: center;
         }
         .point {
           r: 5;
@@ -97,6 +164,10 @@ export class Workspace extends Jadis {
           width: auto;
           max-width: calc(100vw - 16px);
           flex: 0 0 auto;
+        }
+
+        .dimensions-panel {
+          width: min(100%, 440px);
         }
       }
     `;
@@ -276,9 +347,43 @@ export class Workspace extends Jadis {
   private startRendering() {
     const render = () => {
       this._renderService?.render();
+      this.updatePerspectiveDimensionsTable();
       requestAnimationFrame(render);
     };
     render();
+  }
+
+  private updatePerspectiveDimensionsTable() {
+    if (!this._renderService) {
+      return;
+    }
+
+    const points = this._renderService.getTablePoints();
+    const content = this.buildPerspectiveDimensionsRows(points);
+
+    if (this.refs.perspectiveDimensionsBody.innerHTML !== content) {
+      this.refs.perspectiveDimensionsBody.innerHTML = content;
+    }
+  }
+
+  private buildPerspectiveDimensionsRows(points: TablePointDimensions[]) {
+    return points
+      .map(
+        (point) => `
+        <tr>
+          <td>${point.label}</td>
+          <td>${this.formatMillimeters(point.x)}</td>
+          <td>${this.formatMillimeters(point.y)}</td>
+        </tr>
+      `
+      )
+      .join('');
+  }
+
+  private formatMillimeters(value: number): string {
+    const rounded = Math.round(value * 10) / 10;
+    const normalized = Object.is(rounded, -0) ? 0 : rounded;
+    return normalized.toFixed(1);
   }
 }
 

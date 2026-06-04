@@ -1,4 +1,4 @@
-import type { PaperFormatsValues } from '../types/paper-format.type';
+import type { PaperOrientationValues, PaperSizeValues } from '../types/paper-format.type';
 
 type BorderSide = 'left' | 'top' | 'right' | 'bottom';
 
@@ -10,7 +10,8 @@ interface BorderHandleState {
 }
 
 export interface State {
-  paperFormat: PaperFormatsValues;
+  paperSize: PaperSizeValues;
+  paperOrientation: PaperOrientationValues;
   visionAngle: number;
   displayMeasurePoints: boolean;
   displayCompletePerspectiveLines: boolean;
@@ -19,6 +20,8 @@ export interface State {
   vanishingPointLeftX: number;
   vanishingPointRightX: number;
   cubeAngle: number;
+  cubeAngleMinutes: number;
+  cubeAngleSeconds: number;
   borderHandles: Record<BorderHandleId, BorderHandleState>;
   hoveredBorderHandle: BorderHandleId | null;
 }
@@ -26,18 +29,21 @@ export interface State {
 class StateService {
   private _state: State = {
     borderHandles: {
-      'left-bottom': { ratio: 0.625, side: 'left' },
-      'left-top': { ratio: 0.375, side: 'left' },
-      'right-bottom': { ratio: 0.625, side: 'right' },
-      'right-top': { ratio: 0.375, side: 'right' },
+      'left-bottom': { ratio: 1, side: 'left' },
+      'left-top': { ratio: 0, side: 'left' },
+      'right-bottom': { ratio: 1, side: 'right' },
+      'right-top': { ratio: 0, side: 'right' },
     },
-    cubeAngle: 35,
+    cubeAngle: 45,
+    cubeAngleMinutes: 0,
+    cubeAngleSeconds: 0,
     displayCompletePerspectiveLines: true,
     displayMeasurePoints: true,
-    horizonLineY: 70,
+    horizonLineY: 100,
     hoveredBorderHandle: null,
     observerPosition: { x: 100, y: 100 },
-    paperFormat: 'landscape',
+    paperOrientation: 'landscape',
+    paperSize: 'a4',
     vanishingPointLeftX: 10,
     vanishingPointRightX: 287,
     visionAngle: 60,
@@ -47,8 +53,12 @@ class StateService {
     return this._state;
   }
 
-  setPaperFormat(format: PaperFormatsValues) {
-    this._state.paperFormat = format;
+  setPaperSize(size: PaperSizeValues) {
+    this._state.paperSize = size;
+  }
+
+  setPaperOrientation(orientation: PaperOrientationValues) {
+    this._state.paperOrientation = orientation;
   }
 
   setVisionAngle(angle: number) {
@@ -69,6 +79,14 @@ class StateService {
 
   setCubeAngle(angle: number) {
     this._state.cubeAngle = angle;
+  }
+
+  setCubeAngleMinutes(minutes: number) {
+    this._state.cubeAngleMinutes = minutes;
+  }
+
+  setCubeAngleSeconds(seconds: number) {
+    this._state.cubeAngleSeconds = seconds;
   }
 
   setBorderHandlePosition(handle: BorderHandleId, side: BorderSide, ratio: number) {
