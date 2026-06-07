@@ -44,7 +44,8 @@ export class RenderService {
   private _lineWidth = '0.5';
   private _pointRadius = '1';
   private _visionLineColor = 'green';
-  private _perspectiveLineColor = '#666';
+  private _perspectiveLineColorLeft = 'red';
+  private _perspectiveLineColorRight = 'blue';
 
   constructor(layer: SVGGElement) {
     this._layer = layer;
@@ -202,28 +203,32 @@ export class RenderService {
       handles['left-top'].position.x,
       handles['left-top'].position.y,
       vanishingPointRightX,
-      this._state.horizonLineY
+      this._state.horizonLineY,
+      this._perspectiveLineColorRight
     );
     this.drawPerspectiveLine(
       perspectiveLines,
       handles['left-bottom'].position.x,
       handles['left-bottom'].position.y,
       vanishingPointRightX,
-      this._state.horizonLineY
+      this._state.horizonLineY,
+      this._perspectiveLineColorRight
     );
     this.drawPerspectiveLine(
       perspectiveLines,
       handles['right-top'].position.x,
       handles['right-top'].position.y,
       vanishingPointLeftX,
-      this._state.horizonLineY
+      this._state.horizonLineY,
+      this._perspectiveLineColorLeft
     );
     this.drawPerspectiveLine(
       perspectiveLines,
       handles['right-bottom'].position.x,
       handles['right-bottom'].position.y,
       vanishingPointLeftX,
-      this._state.horizonLineY
+      this._state.horizonLineY,
+      this._perspectiveLineColorLeft
     );
 
     this._layer.appendChild(perspectiveLines);
@@ -384,10 +389,11 @@ export class RenderService {
     startX: number,
     startY: number,
     targetX: number,
-    targetY: number
+    targetY: number,
+    color: string
   ) {
     const line = this.buildSvgElement('line', {
-      stroke: this._perspectiveLineColor,
+      stroke: color,
       'stroke-width': this._lineWidth,
       x1: `${startX}`,
       x2: `${targetX}`,
