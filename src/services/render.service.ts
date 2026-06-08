@@ -30,8 +30,8 @@ export class RenderService {
 
   render() {
     this.syncState();
-    const observerPosition = this._calculations.computeObserverPosition();
-    stateService.setObserverPosition(observerPosition.x, observerPosition.y);
+    const { leftX, rightX } = this._calculations.computeVanishingPoints();
+    stateService.setVanishingPoints(leftX, rightX);
     this.syncState();
 
     this.clearLayer();

@@ -39,9 +39,9 @@ class StateService {
     cubeAngleSeconds: 0,
     displayCompletePerspectiveLines: true,
     displayMeasurePoints: true,
-    horizonLineY: 100,
+    horizonLineY: 105,
     hoveredBorderHandle: null,
-    observerPosition: { x: 100, y: 100 },
+    observerPosition: { x: 148.5, y: 243.5 },
     paperOrientation: 'landscape',
     paperSize: 'a4',
     vanishingPointLeftX: 10,
@@ -75,6 +75,11 @@ class StateService {
 
   setObserverPosition(x: number, y: number) {
     this._state.observerPosition = { x, y };
+  }
+
+  setVanishingPoints(leftX: number, rightX: number) {
+    this._state.vanishingPointLeftX = leftX;
+    this._state.vanishingPointRightX = rightX;
   }
 
   setCubeAngle(angle: number) {

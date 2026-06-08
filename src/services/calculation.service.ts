@@ -50,28 +50,23 @@ export class CalculationService {
   }
 
   computeObserverPosition(): Point {
-    const {
-      cubeAngle,
-      cubeAngleMinutes,
-      cubeAngleSeconds,
-      vanishingPointLeftX,
-      vanishingPointRightX,
-      horizonLineY,
-    } = this._state;
+    return { ...this._state.observerPosition };
+  }
 
-    const fullCubeAngle = cubeAngle + cubeAngleMinutes / 60 + cubeAngleSeconds / 3600;
+  computeVanishingPoints(): { leftX: number; rightX: number } {
+    const { observerPosition, horizonLineY } = this._state;
+    const cubeAngleRadians = this.getCubeAngleInRadians();
+    const epsilon = 0.0001;
+    const clampedAngle = Math.min(Math.PI / 2 - epsilon, Math.max(epsilon, cubeAngleRadians));
+    const verticalDistanceToHorizon = Math.max(epsilon, Math.abs(observerPosition.y - horizonLineY));
+    const tangent = Math.tan(clampedAngle);
 
-    const radianCubeAngle = (fullCubeAngle * Math.PI) / 180;
-    const vanishingPointsDistance = vanishingPointRightX - vanishingPointLeftX;
-    const sin = Math.sin(radianCubeAngle);
-    const cos = Math.cos(radianCubeAngle);
-
-    const leftDistanceToPrinciplePoint = vanishingPointsDistance * sin * sin;
-    const observerDistanceToHorizon = vanishingPointsDistance * sin * cos;
+    const leftDistanceToPrinciplePoint = verticalDistanceToHorizon * tangent;
+    const rightDistanceToPrinciplePoint = verticalDistanceToHorizon / tangent;
 
     return {
-      x: vanishingPointLeftX + leftDistanceToPrinciplePoint,
-      y: horizonLineY + observerDistanceToHorizon,
+      leftX: observerPosition.x - leftDistanceToPrinciplePoint,
+      rightX: observerPosition.x + rightDistanceToPrinciplePoint,
     };
   }
 
@@ -304,6 +299,13 @@ export class CalculationService {
     return observerPosition.x + t * rayDx;
   }
 
+  private getCubeAngleInRadians(): number {
+    const { cubeAngle, cubeAngleMinutes, cubeAngleSeconds } = this._state;
+    const fullCubeAngle = cubeAngle + cubeAngleMinutes / 60 + cubeAngleSeconds / 3600;
+
+    return (fullCubeAngle * Math.PI) / 180;
+  }
+
   private getVisionHitPoint(angle: number): { x1: number; x2: number } {
     const { observerPosition, horizonLineY } = this._state;
     const verticalDistanceToHorizon = observerPosition.y - horizonLineY;
@@ -407,6 +409,20 @@ export class CalculationService {
           y: horizonLineY,
         },
         label: 'PMD',
+      },
+      {
+        canvasPoint: {
+          x: vanishingPointLeftX,
+          y: horizonLineY,
+        },
+        label: 'PFG',
+      },
+      {
+        canvasPoint: {
+          x: vanishingPointRightX,
+          y: horizonLineY,
+        },
+        label: 'PFD',
       },
     ];
 
