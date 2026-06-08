@@ -5,16 +5,29 @@ import type { State } from './state.service';
 
 export type BorderSide = 'left' | 'top' | 'right' | 'bottom';
 
-export type BorderHandleId = 'left-top' | 'left-bottom' | 'right-top' | 'right-bottom';
+export type BorderHandleId =
+  | 'left-top'
+  | 'left-bottom'
+  | 'right-top'
+  | 'right-bottom'
+  | 'vertical-left'
+  | 'vertical-right';
 
-const PERSPECTIVE_LINE_ORDER: BorderHandleId[] = ['left-top', 'left-bottom', 'right-top', 'right-bottom'];
+type HorizontalHandleId = 'left-top' | 'left-bottom' | 'right-top' | 'right-bottom';
 
-const PERSPECTIVE_LINE_LABELS: Record<BorderHandleId, string> = {
-  'left-bottom': 'B',
-  'left-top': 'A',
-  'right-bottom': 'D',
-  'right-top': 'C',
+const PERSPECTIVE_LINE_ORDER: HorizontalHandleId[] = ['left-top', 'left-bottom', 'right-top', 'right-bottom'];
+
+const PERSPECTIVE_LINE_LABELS: Record<HorizontalHandleId, string> = {
+  'left-bottom': 'D2',
+  'left-top': 'D1',
+  'right-bottom': 'G2',
+  'right-top': 'G1',
 };
+
+const VERTICAL_LINE_LABELS: Array<{ handleId: BorderHandleId; lineLabel: string }> = [
+  { handleId: 'vertical-left', lineLabel: 'V1' },
+  { handleId: 'vertical-right', lineLabel: 'V2' },
+];
 
 export type BorderHandle = {
   id: BorderHandleId;
@@ -70,6 +83,32 @@ export class CalculationService {
     };
   }
 
+  computeHorizonLineY(): number {
+    const { observerPosition, horizonLineReferenceY } = this._state;
+    const headAngleRadians = this.getHeadAngleInRadians();
+    const eyeToPictureDistance = Math.max(0.0001, observerPosition.y - horizonLineReferenceY);
+
+    return horizonLineReferenceY + eyeToPictureDistance * Math.tan(headAngleRadians);
+  }
+
+  getThirdVanishingPoint(): Point | null {
+    const { observerPosition, horizonLineY, horizonLineReferenceY } = this._state;
+    const headAngleRadians = this.getHeadAngleInRadians();
+    const epsilon = 0.0001;
+
+    if (Math.abs(headAngleRadians) < epsilon) {
+      return null;
+    }
+
+    const eyeToPictureDistance = Math.max(0.0001, observerPosition.y - horizonLineReferenceY);
+    const verticalOffsetFromHorizon = eyeToPictureDistance / Math.tan(headAngleRadians);
+
+    return {
+      x: observerPosition.x,
+      y: horizonLineY - verticalOffsetFromHorizon,
+    };
+  }
+
   getMeasurePoints(): { measurePoint45: number; measurePointLeft: number; measurePointRight: number } {
     const { observerPosition, horizonLineY, vanishingPointLeftX, vanishingPointRightX } = this._state;
 
@@ -97,7 +136,7 @@ export class CalculationService {
   }
 
   getPaperRectGeometry(): { height: number; width: number; x: number; y: number } {
-    const { observerPosition, horizonLineY } = this._state;
+    const { observerPosition, horizonLineReferenceY } = this._state;
     const { width, height } = getPaperDimensions(this._state.paperSize, this._state.paperOrientation);
 
     const ratio = width / height;
@@ -109,7 +148,7 @@ export class CalculationService {
       height: rectHeight,
       width: rectWidth,
       x: observerPosition.x - rectWidth / 2,
-      y: horizonLineY - rectHeight / 2,
+      y: horizonLineReferenceY - rectHeight / 2,
     };
   }
 
@@ -139,10 +178,22 @@ export class CalculationService {
 
   getPerspectiveLineDimensions(): PerspectiveLineDimensions[] {
     const paper = this.getPaperRectGeometry();
-
-    return PERSPECTIVE_LINE_ORDER.map((handleId) =>
-      this.getPerspectiveLineDimensionsForHandle(handleId, paper)
+    const handles = this.getBorderHandles(paper);
+    const horizontalDimensions = PERSPECTIVE_LINE_ORDER.map((handleId) =>
+      this.getPerspectiveLineDimensionsForHandle(handleId, paper, handles)
     ).filter((line): line is PerspectiveLineDimensions => line !== null);
+
+    const thirdVanishingPoint = this.getThirdVanishingPoint();
+
+    if (!thirdVanishingPoint) {
+      return horizontalDimensions;
+    }
+
+    const verticalDimensions = VERTICAL_LINE_LABELS.map(({ handleId, lineLabel }) =>
+      this.getPerspectiveLineDimensionsFromTarget(lineLabel, handles[handleId].position, thirdVanishingPoint, paper)
+    ).filter((line): line is PerspectiveLineDimensions => line !== null);
+
+    return [...horizontalDimensions, ...verticalDimensions];
   }
 
   getTablePoints(): TablePointDimensions[] {
@@ -216,6 +267,28 @@ export class CalculationService {
         ),
         ratio: borderHandles['right-top'].ratio,
         side: borderHandles['right-top'].side,
+      },
+      'vertical-left': {
+        id: 'vertical-left',
+        label: 'V1',
+        position: this.getBorderHandlePosition(
+          paper,
+          borderHandles['vertical-left'].side,
+          borderHandles['vertical-left'].ratio
+        ),
+        ratio: borderHandles['vertical-left'].ratio,
+        side: borderHandles['vertical-left'].side,
+      },
+      'vertical-right': {
+        id: 'vertical-right',
+        label: 'V2',
+        position: this.getBorderHandlePosition(
+          paper,
+          borderHandles['vertical-right'].side,
+          borderHandles['vertical-right'].ratio
+        ),
+        ratio: borderHandles['vertical-right'].ratio,
+        side: borderHandles['vertical-right'].side,
       },
     };
   }
@@ -306,9 +379,18 @@ export class CalculationService {
     return (fullCubeAngle * Math.PI) / 180;
   }
 
+  private getHeadAngleInRadians(): number {
+    const { headAngle, headAngleMinutes } = this._state;
+    const fullHeadAngle = headAngle >= 0
+      ? headAngle + headAngleMinutes / 60
+      : headAngle - headAngleMinutes / 60;
+
+    return (fullHeadAngle * Math.PI) / 180;
+  }
+
   private getVisionHitPoint(angle: number): { x1: number; x2: number } {
-    const { observerPosition, horizonLineY } = this._state;
-    const verticalDistanceToHorizon = observerPosition.y - horizonLineY;
+    const { observerPosition, horizonLineReferenceY } = this._state;
+    const verticalDistanceToHorizon = observerPosition.y - horizonLineReferenceY;
     const horizontalOffset = verticalDistanceToHorizon * Math.tan(((Math.PI / 180) * angle) / 2);
     return {
       x1: observerPosition.x + horizontalOffset,
@@ -326,6 +408,16 @@ export class CalculationService {
   }
 
   private getVanishingTargetForHandle(handleId: BorderHandleId): Point {
+    if (handleId === 'vertical-left' || handleId === 'vertical-right') {
+      const thirdVanishingPoint = this.getThirdVanishingPoint();
+
+      if (thirdVanishingPoint) {
+        return thirdVanishingPoint;
+      }
+
+      return { x: this._state.observerPosition.x, y: this._state.horizonLineY };
+    }
+
     if (handleId === 'left-top' || handleId === 'left-bottom') {
       return { x: this._state.vanishingPointRightX, y: this._state.horizonLineY };
     }
@@ -334,30 +426,52 @@ export class CalculationService {
   }
 
   private getPerspectiveLineDimensionsForHandle(
-    handleId: BorderHandleId,
-    paper: { x: number; y: number; width: number; height: number }
+    handleId: HorizontalHandleId,
+    paper: { x: number; y: number; width: number; height: number },
+    handles: Record<BorderHandleId, BorderHandle>
   ): PerspectiveLineDimensions | null {
-    const intersections = this.getPaperIntersectionPoints(handleId);
+    const handle = handles[handleId];
 
-    if (!intersections) {
+    if (!handle) {
       return null;
     }
 
     const lineLabel = PERSPECTIVE_LINE_LABELS[handleId];
     const vanishingTarget = this.getVanishingTargetForHandle(handleId);
+
+    return this.getPerspectiveLineDimensionsFromTarget(
+      lineLabel,
+      handle.position,
+      vanishingTarget,
+      paper
+    );
+  }
+
+  private getPerspectiveLineDimensionsFromTarget(
+    lineLabel: string,
+    startPoint: Point,
+    targetPoint: Point,
+    paper: { x: number; y: number; width: number; height: number }
+  ): PerspectiveLineDimensions | null {
+    const intersections = this.getLineRectangleIntersections(startPoint, targetPoint, paper);
+
+    if (intersections.length < 2) {
+      return null;
+    }
+
     const startDistanceToVanishingPoint = Math.hypot(
-      intersections.start.x - vanishingTarget.x,
-      intersections.start.y - vanishingTarget.y
+      intersections[0].x - targetPoint.x,
+      intersections[0].y - targetPoint.y
     );
     const endDistanceToVanishingPoint = Math.hypot(
-      intersections.end.x - vanishingTarget.x,
-      intersections.end.y - vanishingTarget.y
+      intersections[1].x - targetPoint.x,
+      intersections[1].y - targetPoint.y
     );
 
     const primePointCanvas =
-      startDistanceToVanishingPoint <= endDistanceToVanishingPoint ? intersections.start : intersections.end;
+      startDistanceToVanishingPoint <= endDistanceToVanishingPoint ? intersections[0] : intersections[1];
     const pointCanvas =
-      startDistanceToVanishingPoint <= endDistanceToVanishingPoint ? intersections.end : intersections.start;
+      startDistanceToVanishingPoint <= endDistanceToVanishingPoint ? intersections[1] : intersections[0];
 
     const point = this.toPaperSpace(pointCanvas, paper);
     const primePoint = this.toPaperSpace(primePointCanvas, paper);
@@ -426,7 +540,7 @@ export class CalculationService {
       },
     ];
 
-    return candidatePoints
+    const tablePoints = candidatePoints
       .filter(({ canvasPoint }) => this.isPointInsidePaper(canvasPoint, paper))
       .map(({ label, canvasPoint }) => {
         const paperPoint = this.toPaperSpace(canvasPoint, paper);
@@ -437,6 +551,19 @@ export class CalculationService {
           y: paperPoint.y,
         };
       });
+
+    const thirdVanishingPoint = this.getThirdVanishingPoint();
+
+    if (thirdVanishingPoint) {
+      const paperPoint = this.toPaperSpace(thirdVanishingPoint, paper);
+      tablePoints.push({
+        label: 'PFV',
+        x: paperPoint.x,
+        y: paperPoint.y,
+      });
+    }
+
+    return tablePoints;
   }
 
   private isPointInsidePaper(

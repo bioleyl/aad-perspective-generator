@@ -21,6 +21,7 @@ export class RenderService {
   private _visionLineColor = 'green';
   private _perspectiveLineColorLeft = 'red';
   private _perspectiveLineColorRight = 'blue';
+  private _perspectiveLineColorVertical = 'purple';
 
   constructor(layer: SVGGElement) {
     this._layer = layer;
@@ -30,6 +31,10 @@ export class RenderService {
 
   render() {
     this.syncState();
+    const horizonLineY = this._calculations.computeHorizonLineY();
+    stateService.setHorizonLineY(horizonLineY);
+    this.syncState();
+
     const { leftX, rightX } = this._calculations.computeVanishingPoints();
     stateService.setVanishingPoints(leftX, rightX);
     this.syncState();
@@ -37,12 +42,13 @@ export class RenderService {
     this.clearLayer();
     this.drawPaper();
     this.drawPaperAxesReference();
-    // this.drawVisionAngle();
     this.drawVisionCircle();
+    this.drawVisionLine();
     // this.drawObserver();
     this.drawHorizonLine();
     this.drawPrinciplePoint();
     this.drawVanishingPoints();
+    this.drawThirdVanishingPoint();
     this.drawMeasurePoints();
     this.drawPerspectiveLines();
   }
@@ -165,9 +171,13 @@ export class RenderService {
     const paper = this._calculations.getPaperRectGeometry();
     const { displayCompletePerspectiveLines, vanishingPointLeftX, vanishingPointRightX } = this._state;
     const handles = this._calculations.getBorderHandlesGeometry();
+    const thirdVanishingPoint = this._calculations.getThirdVanishingPoint();
+    const visibleHandles = thirdVanishingPoint
+      ? Object.values(handles)
+      : Object.values(handles).filter(({ id }) => id !== 'vertical-left' && id !== 'vertical-right');
 
     if (!displayCompletePerspectiveLines) {
-      this.drawBorderHandles(handles);
+      this.drawBorderHandles(visibleHandles);
       this.drawPerspectivePointMarkers(paper);
       this.drawPerspectivePointLabels(paper);
       return;
@@ -208,8 +218,27 @@ export class RenderService {
       this._perspectiveLineColorLeft
     );
 
+    if (thirdVanishingPoint) {
+      this.drawPerspectiveLine(
+        perspectiveLines,
+        handles['vertical-left'].position.x,
+        handles['vertical-left'].position.y,
+        thirdVanishingPoint.x,
+        thirdVanishingPoint.y,
+        this._perspectiveLineColorVertical
+      );
+      this.drawPerspectiveLine(
+        perspectiveLines,
+        handles['vertical-right'].position.x,
+        handles['vertical-right'].position.y,
+        thirdVanishingPoint.x,
+        thirdVanishingPoint.y,
+        this._perspectiveLineColorVertical
+      );
+    }
+
     this._layer.appendChild(perspectiveLines);
-    this.drawBorderHandles(handles);
+    this.drawBorderHandles(visibleHandles);
     this.drawPerspectivePointMarkers(paper);
     this.drawPerspectivePointLabels(paper);
   }
@@ -234,8 +263,41 @@ export class RenderService {
     this.buildSvgPoint(vanishingPointRightX, horizonLineY, 'purple', 'PFD');
   }
 
-  private drawBorderHandles(handles: Record<BorderHandleId, BorderHandle>) {
-    for (const handle of Object.values(handles)) {
+  private drawThirdVanishingPoint() {
+    const thirdVanishingPoint = this._calculations.getThirdVanishingPoint();
+
+    if (!thirdVanishingPoint) {
+      return;
+    }
+
+    const svg = this._layer.ownerSVGElement;
+    if (!svg) {
+      this.buildSvgPoint(thirdVanishingPoint.x, thirdVanishingPoint.y, 'purple', 'PFV');
+      return;
+    }
+
+    const viewBox = svg.viewBox.baseVal;
+    const padding = 4;
+    const minX = viewBox.x + padding;
+    const maxX = viewBox.x + viewBox.width - padding;
+    const minY = viewBox.y + padding;
+    const maxY = viewBox.y + viewBox.height - padding;
+
+    const isInsideView =
+      thirdVanishingPoint.x >= minX
+      && thirdVanishingPoint.x <= maxX
+      && thirdVanishingPoint.y >= minY
+      && thirdVanishingPoint.y <= maxY;
+
+    if (!isInsideView) {
+      return;
+    }
+
+    this.buildSvgPoint(thirdVanishingPoint.x, thirdVanishingPoint.y, 'purple', 'PFV');
+  }
+
+  private drawBorderHandles(handles: BorderHandle[]) {
+    for (const handle of handles) {
       this.buildSvgBorderHandle(handle.position.x, handle.position.y, handle.id, handle.label);
     }
   }
@@ -292,12 +354,12 @@ export class RenderService {
   }
 
   private drawVisionCircle() {
-    const { observerPosition, horizonLineY } = this._state;
+    const { observerPosition, horizonLineReferenceY } = this._state;
     const radius = this._calculations.getVisionCircleRadius();
     const circle = this.buildSvgElement('circle', {
       class: 'non-printable vision-circle',
       cx: `${observerPosition.x}`,
-      cy: `${horizonLineY}`,
+      cy: `${horizonLineReferenceY}`,
       fill: 'none',
       r: `${radius}`,
       stroke: this._visionLineColor,
@@ -305,6 +367,23 @@ export class RenderService {
       'stroke-width': this._lineWidth,
     });
     this._layer.appendChild(circle);
+  }
+
+  private drawVisionLine() {
+    const { observerPosition, horizonLineReferenceY } = this._state;
+    const radius = this._calculations.getVisionCircleRadius();
+
+    const line = this.buildSvgElement('line', {
+      class: 'non-printable vision-line',
+      stroke: this._visionLineColor,
+      'stroke-width': this._lineWidth,
+      x1: `${observerPosition.x - radius}`,
+      x2: `${observerPosition.x + radius}`,
+      y1: `${horizonLineReferenceY}`,
+      y2: `${horizonLineReferenceY}`,
+    });
+
+    this._layer.appendChild(line);
   }
 
   private drawPerspectiveLine(
@@ -350,6 +429,11 @@ export class RenderService {
   getTablePoints(): TablePointDimensions[] {
     this.syncState();
     return this._calculations.getTablePoints();
+  }
+
+  getThirdVanishingPoint(): Point | null {
+    this.syncState();
+    return this._calculations.getThirdVanishingPoint();
   }
 
   private buildSvgBorderHandle(x: number, y: number, id: BorderHandleId, label: string): void {

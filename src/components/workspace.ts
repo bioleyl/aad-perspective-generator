@@ -7,7 +7,13 @@ import type { TablePointDimensions } from '../services/render.service';
 
 type BorderSide = 'left' | 'top' | 'right' | 'bottom';
 
-type BorderHandleId = 'left-top' | 'left-bottom' | 'right-top' | 'right-bottom';
+type BorderHandleId =
+  | 'left-top'
+  | 'left-bottom'
+  | 'right-top'
+  | 'right-bottom'
+  | 'vertical-left'
+  | 'vertical-right';
 
 type PaperRect = { height: number; width: number; x: number; y: number };
 
@@ -22,7 +28,7 @@ export class Workspace extends Jadis {
   private _paper: SVGSVGElement | null = null;
   private _layer: SVGGElement | null = null;
   private _renderService: RenderService | null = null;
-  private _draggingHandle: 'left-top' | 'left-bottom' | 'right-top' | 'right-bottom' | null = null;
+  private _draggingHandle: BorderHandleId | null = null;
 
   readonly refs = this.useRefs((ref) => ({
     perspectiveDimensionsBody: ref<HTMLTableSectionElement>('.perspective-dimensions-body'),
@@ -249,6 +255,38 @@ export class Workspace extends Jadis {
   }
 
   private getAllowedPath(handleId: BorderHandleId): BorderSegment[] {
+    const leftPath: BorderSegment[] = [
+      { end: { x: 1, y: 0 }, side: 'top', start: { x: 0, y: 0 } },
+      { end: { x: 0, y: 1 }, side: 'left', start: { x: 0, y: 0 } },
+      { end: { x: 0, y: 1 }, side: 'bottom', start: { x: 1, y: 1 } },
+    ];
+    const rightPath: BorderSegment[] = [
+      { end: { x: 0, y: 0 }, side: 'top', start: { x: 1, y: 0 } },
+      { end: { x: 1, y: 1 }, side: 'right', start: { x: 1, y: 0 } },
+      { end: { x: 1, y: 1 }, side: 'bottom', start: { x: 0, y: 1 } },
+    ];
+
+    if (handleId === 'vertical-left' || handleId === 'vertical-right') {
+      const paper = this._renderService?.getPaperRectGeometry();
+      const thirdVanishingPoint = this._renderService?.getThirdVanishingPoint();
+      const isLeftVertical = handleId === 'vertical-left';
+      const basePath = isLeftVertical ? leftPath : rightPath;
+
+      if (!paper || !thirdVanishingPoint) {
+        return basePath;
+      }
+
+      if (thirdVanishingPoint.y < paper.y) {
+        return basePath.filter(({ side }) => side !== 'top');
+      }
+
+      if (thirdVanishingPoint.y > paper.y + paper.height) {
+        return basePath.filter(({ side }) => side !== 'bottom');
+      }
+
+      return basePath;
+    }
+
     if (handleId === 'left-top' || handleId === 'left-bottom') {
       return [
         { end: { x: 1, y: 0 }, side: 'top', start: { x: 0, y: 0 } },

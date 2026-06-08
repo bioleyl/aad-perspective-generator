@@ -2,7 +2,13 @@ import type { PaperOrientationValues, PaperSizeValues } from '../types/paper-for
 
 type BorderSide = 'left' | 'top' | 'right' | 'bottom';
 
-type BorderHandleId = 'left-top' | 'left-bottom' | 'right-top' | 'right-bottom';
+type BorderHandleId =
+  | 'left-top'
+  | 'left-bottom'
+  | 'right-top'
+  | 'right-bottom'
+  | 'vertical-left'
+  | 'vertical-right';
 
 interface BorderHandleState {
   ratio: number;
@@ -13,8 +19,11 @@ export interface State {
   paperSize: PaperSizeValues;
   paperOrientation: PaperOrientationValues;
   visionAngle: number;
+  headAngle: number;
+  headAngleMinutes: number;
   displayMeasurePoints: boolean;
   displayCompletePerspectiveLines: boolean;
+  horizonLineReferenceY: number;
   horizonLineY: number;
   observerPosition: { x: number; y: number };
   vanishingPointLeftX: number;
@@ -33,12 +42,17 @@ class StateService {
       'left-top': { ratio: 0, side: 'left' },
       'right-bottom': { ratio: 1, side: 'right' },
       'right-top': { ratio: 0, side: 'right' },
+      'vertical-left': { ratio: 0.5, side: 'left' },
+      'vertical-right': { ratio: 0.5, side: 'right' },
     },
     cubeAngle: 45,
     cubeAngleMinutes: 0,
     cubeAngleSeconds: 0,
     displayCompletePerspectiveLines: true,
     displayMeasurePoints: true,
+    headAngle: 0,
+    headAngleMinutes: 0,
+    horizonLineReferenceY: 105,
     horizonLineY: 105,
     hoveredBorderHandle: null,
     observerPosition: { x: 148.5, y: 243.5 },
@@ -65,6 +79,14 @@ class StateService {
     this._state.visionAngle = angle;
   }
 
+  setHeadAngle(angle: number) {
+    this._state.headAngle = angle;
+  }
+
+  setHeadAngleMinutes(minutes: number) {
+    this._state.headAngleMinutes = minutes;
+  }
+
   setDisplayMeasurePoints(display: boolean) {
     this._state.displayMeasurePoints = display;
   }
@@ -75,6 +97,10 @@ class StateService {
 
   setObserverPosition(x: number, y: number) {
     this._state.observerPosition = { x, y };
+  }
+
+  setHorizonLineY(y: number) {
+    this._state.horizonLineY = y;
   }
 
   setVanishingPoints(leftX: number, rightX: number) {
